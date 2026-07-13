@@ -39,18 +39,36 @@
 
 ---
 
-## 💻 运行环境与编译
+## 🖥️ 系统要求与版本选择
 
-* **运行环境**：Windows 10 / 11 (.NET 8.0 Desktop Runtime)
-* **开发环境**：Visual Studio 2022 / .NET SDK 8.0
+* **操作系统**：Windows 10 / 11（64 位）
 
-在项目根目录下执行以下命令即可编译与运行：
+| 版本名称 | 内置依赖 | 适用场景与特点 |
+| :--- | :--- | :--- |
+| **独立免装版** (Standalone) | 无，双击即用 | **开箱即用**。内置了整个 .NET 8.0 运行库，即使您的电脑没有配置过开发环境，也能直接双击启动，非常方便。 |
+| **极致精简版** (Lite) | 需预装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) | **极速轻巧**。不含任何冗余运行时，程序体积仅几百 KB 级别，适合极客及已安装过运行库的用户。 |
+
+## 💾 下载地址
+
+您可以通过以下渠道下载预编译好的二进制可执行文件：
+
+1. **蓝奏云下载 (国内加速)**：[点击下载](https://li5bo5.lanzouu.com/b00egskkqb) (提取密码: `Wink`)
+2. **GitHub Releases**：[GitHub 发行版页面](https://github.com/li5bo5/WinKit/releases)
+
+---
+
+## 💻 编译与发布指南
+
+在项目根目录下执行以下命令，即可在本地编译并打包输出这两个版本：
+
 ```powershell
-# 编译项目
-dotnet build
+# 1. 编译并打包：极致精简版 (Lite)
+# 文件将输出至项目根目录的 Publish_Releases\Lite\ 文件夹中
+dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:PublishReadyToRun=true -o Publish_Releases\Lite
 
-# 启动程序
-dotnet run --project WinKit 
+# 2. 编译并打包：独立免装版 (Standalone)
+# 文件将输出至项目根目录的 Publish_Releases\Standalone\ 文件夹中
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -o Publish_Releases\Standalone
 ```
 
 ---
