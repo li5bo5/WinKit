@@ -76,3 +76,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 ## 📄 开源协议
 
 本项目采用 **AGPL-3.0 (GNU Affero General Public License v3.0)** 协议开源。
+
+---
+
+## 友情链接
+- [LINUX DO 社区](https://linux.do/)
