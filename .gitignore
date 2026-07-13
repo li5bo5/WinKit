@@ -1,6 +1,7 @@
-## ── 参考代码与原始项目忽略 ──────────────────────────
+## ── 参考代码、设计与文档忽略 ──────────────────────────
 /MiniPaste/
 /PinToD/
+/开发文档/
 
 ## ── .NET / Visual Studio 忽略 ────────────────────────
 [Ob]bj/
@@ -12,10 +13,10 @@
 *.sln.docstates
 
 # 平台与打包
-/WinKit/bin/
-/WinKit/obj/
-/WinKit/AppPackages/
-/WinKit/BundleArtifacts/
+/bin/
+/obj/
+/AppPackages/
+/BundleArtifacts/
 
 # 数据库与本地用户配置
 *.db

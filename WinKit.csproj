@@ -11,7 +11,7 @@
     <RootNamespace>WinKit</RootNamespace>
     <Version>1.0.0</Version>
     <Authors>WinKit Developer</Authors>
-    <Description>统一桌面助手 (TodoList &amp; MiniPaste)</Description>
+    <Description>统一桌面助手 (TodoList &amp; Clipboard)</Description>
     <ApplicationIcon>PTD.ico</ApplicationIcon>
     
     <!-- 优化发布选项 -->
@@ -31,6 +31,14 @@
     <!-- 将 PTD.ico 作为嵌入资源，以便托盘读取，同时编译为应用程序图标 -->
     <Resource Include="PTD.ico" />
     <EmbeddedResource Include="PTD.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 排除外部参考项目，防止其代码和 XAML 被默认编译进去 -->
+    <Compile Remove="MiniPaste\**\*" />
+    <Compile Remove="PinToD\**\*" />
+    <Page Remove="MiniPaste\**\*" />
+    <Page Remove="PinToD\**\*" />
   </ItemGroup>
 
 </Project>
