@@ -1,0 +1,235 @@
+<Window x:Class="WinKit.Todo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:WinKit.Todo.Models"
+        Title="PTD" Width="280"
+        MinWidth="200" MinHeight="200"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        PreviewMouseDoubleClick="Window_PreviewMouseDoubleClick"
+        ResizeMode="CanResize">
+
+    <!-- 主容器：圆角边框 + 60% 不透明白色背景 -->
+    <Border x:Name="RootBorder"
+            Background="#66FFFFFF"
+            CornerRadius="10"
+            BorderBrush="#44000000"
+            BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="36"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- ══════════════════════════════════════════
+                 标题栏：拖动 + TitleBar 按钮组
+            ══════════════════════════════════════════ -->
+            <Grid Grid.Row="0" x:Name="TitleBar"
+                  MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                  MouseEnter="TitleBar_MouseEnter"
+                  MouseLeave="TitleBar_MouseLeave"
+                  Background="Transparent">
+
+                <TextBlock Text="TodoList"
+                           VerticalAlignment="Center"
+                           Margin="14,0"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="#333"/>
+
+                <!-- 右侧按钮组：置顶 | 穿透 | 关闭 -->
+                <StackPanel x:Name="TitleButtons"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,0,4,0">
+
+                    <Button x:Name="PinBtn"
+                             Content="📍"
+                             Style="{StaticResource TitleBarBtn}"
+                             Click="PinBtn_Click"
+                             ToolTip="取消置顶"/>
+
+                    <Button x:Name="PassThroughBtn"
+                             Content="⊙"
+                             Style="{StaticResource TitleBarBtn}"
+                             Click="PassThroughBtn_Click"
+                             ToolTip="开启鼠标穿透"/>
+
+                    <Button x:Name="CloseBtn"
+                             Content="✕"
+                             Style="{StaticResource TitleBarBtn}"
+                             Click="CloseBtn_Click"
+                             ToolTip="隐藏到托盘"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ══════════════════════════════════════════
+                 内容区：列表 + 内联输入 + ResizeGrip
+            ══════════════════════════════════════════ -->
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="14"/>
+                </Grid.RowDefinitions>
+
+                <!-- 待办列表 + 空列表占位符（同一 Grid 单元格叠放） -->
+                <Grid Grid.Row="0">
+                    <ListView x:Name="TodoList"
+                               Background="Transparent"
+                               BorderThickness="0"
+                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                               FocusVisualStyle="{x:Null}"
+                               IsTabStop="False"
+                               AllowDrop="True"
+                               MouseDoubleClick="TodoList_MouseDoubleClick"
+                               PreviewMouseLeftButtonDown="TodoList_PreviewMouseLeftButtonDown"
+                               PreviewMouseMove="TodoList_PreviewMouseMove"
+                               Drop="TodoList_Drop">
+
+                        <!-- 使用自定义 ScrollViewer（细滚动条，自动隐藏） -->
+                        <ListView.Template>
+                            <ControlTemplate TargetType="ListView">
+                                <ScrollViewer Style="{StaticResource NarrowScrollViewer}"
+                                              Focusable="False">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ListView.Template>
+
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,1"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <Setter Property="IsTabStop" Value="False"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListViewItem">
+                                            <Border x:Name="itemBd"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="6"
+                                                    Margin="6,2">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="itemBd" Property="Background" Value="#14000000"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+
+                        <ListView.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:TodoItem}">
+                                <Grid Margin="8,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 左侧圆点标识，多行时顶部对齐 -->
+                                    <Ellipse Grid.Column="0"
+                                             Width="6" Height="6"
+                                             Fill="#88888888"
+                                             VerticalAlignment="Top"
+                                             Margin="0,5,8,0"/>
+
+                                    <!-- 待办文本：自动换行，无字数限制 -->
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Title}"
+                                               FontSize="13"
+                                               Foreground="#222"
+                                               TextWrapping="Wrap"/>
+
+                                    <!-- 编辑按钮（悬停时显示） -->
+                                    <Button x:Name="EditBtn"
+                                            Grid.Column="2"
+                                            Content="✎"
+                                            Style="{StaticResource ActionBtn}"
+                                            Tag="{Binding Id}"
+                                            Click="EditBtn_Click"
+                                            Visibility="Hidden"
+                                            ToolTip="编辑"/>
+
+                                    <!-- 删除按钮（悬停时显示） -->
+                                    <Button x:Name="DeleteBtn"
+                                            Grid.Column="3"
+                                            Content="✕"
+                                            Style="{StaticResource ActionBtn}"
+                                            Tag="{Binding Id}"
+                                            Click="DeleteBtn_Click"
+                                            Visibility="Hidden"
+                                            ToolTip="删除"/>
+                                </Grid>
+
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsMouseOver,
+                                                 RelativeSource={RelativeSource AncestorType=ListViewItem}}"
+                                                 Value="True">
+                                        <Setter TargetName="EditBtn"   Property="Visibility" Value="Visible"/>
+                                        <Setter TargetName="DeleteBtn" Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <!-- 空列表占位符 -->
+                    <TextBlock x:Name="EmptyPlaceholder"
+                               Text="暂无代办"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="#88000000"
+                               FontSize="13"
+                               Visibility="Collapsed"
+                               IsHitTestVisible="False"/>
+                </Grid>
+
+                <!-- 内联输入框（双击空白处触发，无字数限制） -->
+                <Border x:Name="InlineInputArea"
+                        Grid.Row="1"
+                        Visibility="Collapsed"
+                        Margin="10,0,10,4">
+                    <TextBox x:Name="InlineEditBox"
+                              Style="{StaticResource InlineTextBox}"
+                              KeyDown="InlineEditBox_KeyDown"
+                              LostFocus="InlineEditBox_LostFocus"
+                              ToolTip="回车确认 / Esc 取消"/>
+                </Border>
+
+                <!-- 右下角自定义 ResizeGrip -->
+                <Grid Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                    <Border x:Name="ResizeGripArea"
+                            Width="14" Height="14"
+                            Background="Transparent"
+                            Cursor="SizeNWSE"
+                            Opacity="0"
+                            MouseEnter="ResizeGrip_MouseEnter"
+                            MouseLeave="ResizeGrip_MouseLeave"
+                            MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
+                            ToolTip="拖动调整大小">
+                        <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                            <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                            <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                            <Line X1="10" Y1="10" X2="10" Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                        </Canvas>
+                    </Border>
+                </Grid>
+
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

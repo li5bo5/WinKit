@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>WinKit</AssemblyName>
+    <RootNamespace>WinKit</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>WinKit Developer</Authors>
+    <Description>统一桌面助手 (TodoList &amp; MiniPaste)</Description>
+    <ApplicationIcon>PTD.ico</ApplicationIcon>
+    
+    <!-- 优化发布选项 -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 将 PTD.ico 作为嵌入资源，以便托盘读取，同时编译为应用程序图标 -->
+    <Resource Include="PTD.ico" />
+    <EmbeddedResource Include="PTD.ico" />
+  </ItemGroup>
+
+</Project>
