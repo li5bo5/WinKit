@@ -1,0 +1,31 @@
+## ── 参考代码与原始项目忽略 ──────────────────────────
+/MiniPaste/
+/PinToD/
+
+## ── .NET / Visual Studio 忽略 ────────────────────────
+[Ob]bj/
+[Bb]in/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# 平台与打包
+/WinKit/bin/
+/WinKit/obj/
+/WinKit/AppPackages/
+/WinKit/BundleArtifacts/
+
+# 数据库与本地用户配置
+*.db
+*.db-shm
+*.db-wal
+settings.json
+todos.md
+
+# 操作系统临时文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
