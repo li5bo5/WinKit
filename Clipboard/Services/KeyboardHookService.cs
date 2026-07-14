@@ -31,8 +31,8 @@ namespace WinKit.Clipboard.Services
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string lpModuleName);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
-        private static extern short GetKeyState(int keyCode);
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
 
         [DllImport("user32.dll")]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
@@ -72,8 +72,8 @@ namespace WinKit.Clipboard.Services
                 if (vkCode == VK_V && (message == WM_KEYDOWN || message == WM_SYSKEYDOWN))
                 {
                     // 实时检查物理键盘上 Left Windows 或 Right Windows 键是否处于按下状态
-                    bool isLWinPressed = (GetKeyState(VK_LWIN) & 0x8000) != 0;
-                    bool isRWinPressed = (GetKeyState(VK_RWIN) & 0x8000) != 0;
+                    bool isLWinPressed = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0;
+                    bool isRWinPressed = (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
 
                     if (isLWinPressed || isRWinPressed)
                     {

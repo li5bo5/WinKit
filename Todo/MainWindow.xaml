@@ -15,9 +15,9 @@
 
     <!-- 主容器：圆角边框 + 60% 不透明白色背景 -->
     <Border x:Name="RootBorder"
-            Background="#66FFFFFF"
+            Background="#CCFFFFFF"
             CornerRadius="10"
-            BorderBrush="#44000000"
+            BorderBrush="#22000000"
             BorderThickness="1">
         <Grid>
             <Grid.RowDefinitions>
@@ -152,7 +152,11 @@
                                                Text="{Binding Title}"
                                                FontSize="13"
                                                Foreground="#222"
-                                               TextWrapping="Wrap"/>
+                                               TextWrapping="Wrap"
+                                               TextTrimming="CharacterEllipsis"
+                                               LineHeight="18"
+                                               LineStackingStrategy="BlockLineHeight"
+                                               MaxHeight="54"/>
 
                                     <!-- 编辑按钮（悬停时显示） -->
                                     <Button x:Name="EditBtn"
@@ -204,10 +208,11 @@
                         Visibility="Collapsed"
                         Margin="10,0,10,4">
                     <TextBox x:Name="InlineEditBox"
-                              Style="{StaticResource InlineTextBox}"
-                              KeyDown="InlineEditBox_KeyDown"
-                              LostFocus="InlineEditBox_LostFocus"
-                              ToolTip="回车确认 / Esc 取消"/>
+                             Style="{StaticResource InlineTextBox}"
+                             PreviewKeyDown="InlineEditBox_PreviewKeyDown"
+                             LostFocus="InlineEditBox_LostFocus"
+                             TextChanged="InlineEditBox_TextChanged"
+                             ToolTip="回车确认 / Esc 取消"/>
                 </Border>
 
                 <!-- 右下角自定义 ResizeGrip -->

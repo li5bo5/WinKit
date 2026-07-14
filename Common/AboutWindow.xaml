@@ -10,9 +10,9 @@
         WindowStartupLocation="CenterScreen"
         Deactivated="Window_Deactivated">
 
-    <Border Background="#F2F5F5F5"
+    <Border Background="#D9F5F5F5"
             CornerRadius="10"
-            BorderBrush="#22000000"
+            BorderBrush="#1A000000"
             BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" Color="Black"/>
