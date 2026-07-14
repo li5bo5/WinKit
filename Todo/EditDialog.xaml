@@ -12,9 +12,9 @@
         ShowInTaskbar="False">
 
     <!-- 与主窗口一致：圆角 + 半透明白色背景 -->
-    <Border Background="#F2FFFFFF"
+    <Border Background="#D9FFFFFF"
             CornerRadius="10"
-            BorderBrush="#44000000"
+            BorderBrush="#22000000"
             BorderThickness="1">
         <StackPanel Margin="14,12">
 
@@ -38,7 +38,8 @@
             <TextBox x:Name="InputBox"
                      Style="{StaticResource InlineTextBox}"
                      Margin="0,0,0,12"
-                     KeyDown="InputBox_KeyDown"
+                     PreviewKeyDown="InputBox_PreviewKeyDown"
+                     TextChanged="InputBox_TextChanged"
                      ToolTip="Enter 确认 / Esc 取消"/>
         </StackPanel>
     </Border>

@@ -11,6 +11,9 @@ namespace WinKit.Common
         public bool TodoIsPinned { get; set; } = false;
         public bool TodoIsPassThrough { get; set; } = false;
 
+        // ── 不透明度设置 ────────────────────────────────
+        public int WindowOpacity { get; set; } = 80; // 80% 不透明度（默认）
+
         // ── Clipboard 剪贴板设置 ────────────────────────
         public int PasteMaxItems { get; set; } = 100;
         public bool PasteEnableTextDeduplication { get; set; } = true;

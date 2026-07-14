@@ -15,9 +15,9 @@
 
     <!-- 主容器：圆角边框 + 60% 不透明白色背景 (#99FFFFFF) -->
     <Border x:Name="RootBorder"
-            Background="#99FFFFFF"
+            Background="#CCFFFFFF"
             CornerRadius="10"
-            BorderBrush="#44000000"
+            BorderBrush="#22000000"
             BorderThickness="1">
         <Grid>
             <Grid.RowDefinitions>
@@ -60,6 +60,9 @@
                          VirtualizingStackPanel.IsVirtualizing="True"
                          VirtualizingStackPanel.VirtualizationMode="Recycling"
                          ScrollViewer.CanContentScroll="True"
+                         FocusVisualStyle="{x:Null}"
+                         IsTabStop="False"
+                         KeyDown="ClipboardList_KeyDown"
                          MouseDoubleClick="ClipboardList_MouseDoubleClick">
 
                     <ListBox.Template>
@@ -79,6 +82,7 @@
                             <Setter Property="Background" Value="Transparent"/>
                             <Setter Property="BorderThickness" Value="0"/>
                             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="ListBoxItem_PreviewMouseLeftButtonDown"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
@@ -93,7 +97,7 @@
                                                 <Setter TargetName="itemBd" Property="Background" Value="#14000000"/>
                                             </Trigger>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="itemBd" Property="Background" Value="#24000000"/>
+                                                <Setter TargetName="itemBd" Property="Background" Value="#1A000000"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -115,8 +119,11 @@
                                            Text="{Binding DisplayText}"
                                            FontSize="12.5"
                                            Foreground="#222"
-                                           TextWrapping="NoWrap"
+                                           TextWrapping="Wrap"
                                            TextTrimming="CharacterEllipsis"
+                                           LineHeight="18"
+                                           LineStackingStrategy="BlockLineHeight"
+                                           MaxHeight="54"
                                            VerticalAlignment="Center"/>
 
                                 <!-- 删除按钮 (鼠标悬停显示) -->

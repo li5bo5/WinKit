@@ -34,6 +34,7 @@ namespace WinKit.Todo.Services
                 if (string.IsNullOrWhiteSpace(trimmed)) continue;
                 // 格式："- Title" (markdown 列表项)
                 var title = trimmed.StartsWith("- ") ? trimmed.Substring(2) : trimmed;
+                title = title.Replace("\\n", "\n").Replace("\\r", "\r");
                 todos.Add(new TodoItem { Title = title });
             }
             return todos;
@@ -44,7 +45,8 @@ namespace WinKit.Todo.Services
             var sb = new StringBuilder();
             foreach (var item in items)
             {
-                sb.AppendLine($"- {item.Title}");
+                var escaped = item.Title.Replace("\r", "\\r").Replace("\n", "\\n");
+                sb.AppendLine($"- {escaped}");
             }
             File.WriteAllText(_filePath, sb.ToString(), Encoding.UTF8);
         }

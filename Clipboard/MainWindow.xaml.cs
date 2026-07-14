@@ -22,6 +22,8 @@ namespace WinKit.Clipboard
         private bool _isResizing = false;
         private WinPoint _resizeStart;
         private double _resizeStartW, _resizeStartH;
+        private Guid? _copiedItemId = null;
+        private int _toastActiveCount = 0;
 
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out POINT lpPoint);
@@ -135,7 +137,81 @@ namespace WinKit.Clipboard
 
         private void ClipboardList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            PasteSelectedItem();
+            if (ClipboardList.SelectedItem is ClipboardItem item)
+            {
+                UseSelectedItem(item);
+            }
+        }
+
+        private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is ListBoxItem item && item.Content is ClipboardItem clipItem)
+            {
+                CopyItemToClipboard(clipItem);
+            }
+        }
+
+        private void ClipboardList_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                if (ClipboardList.SelectedItem is ClipboardItem item)
+                {
+                    if (_copiedItemId == item.Id)
+                    {
+                        UseSelectedItem(item);
+                    }
+                    else
+                    {
+                        CopyItemToClipboard(item);
+                    }
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void CopyItemToClipboard(ClipboardItem item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.Content)) return;
+            try
+            {
+                System.Windows.Clipboard.SetText(item.Content);
+                _copiedItemId = item.Id;
+                ShowToast("已复制到系统剪贴板");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"复制失败: {ex.Message}");
+            }
+        }
+
+        private async void UseSelectedItem(ClipboardItem item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.Content)) return;
+            try
+            {
+                System.Windows.Clipboard.SetText(item.Content);
+                _copiedItemId = null;
+                Hide();
+                await Task.Delay(80);
+                SimulateCtrlV();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"回填粘贴失败: {ex.Message}");
+            }
+        }
+
+        private async void ShowToast(string message)
+        {
+            CountText.Text = message;
+            _toastActiveCount++;
+            await Task.Delay(1200);
+            _toastActiveCount--;
+            if (_toastActiveCount == 0)
+            {
+                UpdateUIStates();
+            }
         }
 
         private void DeleteButton_Click(object sender, RoutedEventArgs e)
@@ -152,24 +228,6 @@ namespace WinKit.Clipboard
             if (System.Windows.MessageBox.Show("确定清空全部剪贴板历史吗？此操作不可撤销。", "提示", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
                 _clipboardManager.ClearAll();
-            }
-        }
-
-        private async void PasteSelectedItem()
-        {
-            if (ClipboardList.SelectedItem is ClipboardItem item && !string.IsNullOrEmpty(item.Content))
-            {
-                try
-                {
-                    System.Windows.Clipboard.SetText(item.Content);
-                    Hide();
-                    await Task.Delay(80);
-                    SimulateCtrlV();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"回填粘贴失败: {ex.Message}");
-                }
             }
         }
 

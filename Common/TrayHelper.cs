@@ -69,6 +69,11 @@ namespace WinKit.Common
         private readonly MenuItem _itemAbout; // 关于选项
         private readonly MenuItem _itemExit;
 
+        // 不透明度子菜单
+        private readonly MenuItem _opacityMenu;
+        private static readonly int[] _opacityLevels = { 40, 60, 70, 80, 90, 100 };
+        private readonly MenuItem[] _opacityItems;
+
         // 双击/单击计时器
         private readonly SWF.Timer _clickTimer;
 
@@ -148,7 +153,24 @@ namespace WinKit.Common
             _pasteMenu.Items.Add(_pasteDedup);
             _pasteMenu.Items.Add(_pasteMonitoring);
 
-            // ── 5. 组建开机自启顶级菜单 ───────────────────────
+            // ── 5. 组建不透明度子菜单 ──────────────────────
+            _opacityMenu = new MenuItem { Header = "不透明度" };
+            _opacityItems = new MenuItem[_opacityLevels.Length];
+            for (int i = 0; i < _opacityLevels.Length; i++)
+            {
+                int level = _opacityLevels[i]; // 捕获循环变量
+                var item = new MenuItem
+                {
+                    Header       = $"{level}%",
+                    IsCheckable  = true,
+                    IsChecked    = (_settingsManager.Settings.WindowOpacity == level)
+                };
+                item.Click += (s, e) => SetOpacity(level);
+                _opacityItems[i] = item;
+                _opacityMenu.Items.Add(item);
+            }
+
+            // ── 6. 组建开机自启顶级菜单 ───────────────────────
             _itemAutoStart = new MenuItem { Header = "开机启动" };
             _itemAutoStart.IsCheckable = true;
             _itemAutoStart.IsChecked = AutoStartHelper.IsAutoStartEnabled();
@@ -156,17 +178,19 @@ namespace WinKit.Common
                 AutoStartHelper.SetAutoStart(_itemAutoStart.IsChecked);
             };
 
-            // ── 6. 组建关于顶级菜单 ───────────────────────────
+            // ── 7. 组建关于顶级菜单 ───────────────────────────
             _itemAbout = new MenuItem { Header = "关于" };
             _itemAbout.Click += (s, e) => ShowAboutWindow();
 
-            // ── 7. 组建退出顶级菜单 ───────────────────────────
+            // ── 8. 组建退出顶级菜单 ───────────────────────────
             _itemExit = new MenuItem { Header = "退出" };
             _itemExit.Click += (s, e) => ShutdownApp();
 
-            // ── 8. 上下文菜单组装 ──────────────────────────────
+            // ── 9. 上下文菜单组装 ──────────────────────────────
             _contextMenu.Items.Add(_todoMenu);
             _contextMenu.Items.Add(_pasteMenu);
+            _contextMenu.Items.Add(new Separator());
+            _contextMenu.Items.Add(_opacityMenu);
             _contextMenu.Items.Add(new Separator());
             _contextMenu.Items.Add(_itemAutoStart);
             _contextMenu.Items.Add(_itemAbout);
@@ -274,6 +298,9 @@ namespace WinKit.Common
 
             SyncPinMenuItem();
             SyncPassThroughMenuItem();
+
+            // 初始化应用已保存的不透明度
+            ApplyOpacity(_settingsManager.Settings.WindowOpacity);
         }
 
         private void SyncMenuStates()
@@ -290,6 +317,9 @@ namespace WinKit.Common
             _pasteDedup.IsChecked = _settingsManager.Settings.PasteEnableTextDeduplication;
             _pasteMonitoring.IsChecked = clipboardEnabled;
             _itemAutoStart.IsChecked = AutoStartHelper.IsAutoStartEnabled();
+
+            // 同步不透明度选中状态
+            SyncOpacityMenu(_settingsManager.Settings.WindowOpacity);
         }
 
         public void SyncPinMenuItem()
@@ -300,6 +330,48 @@ namespace WinKit.Common
         public void SyncPassThroughMenuItem()
         {
             _todoPassThrough.Header = ((Todo.MainWindow)_todoWindow).IsPassThrough ? "关闭鼠标穿透" : "鼠标穿透";
+        }
+
+        // ── 不透明度操作 ────────────────────────────────────────
+        private void SetOpacity(int opacity)
+        {
+            var settings = _settingsManager.Settings;
+            settings.WindowOpacity = opacity;
+            _settingsManager.SaveSettings(settings);
+            ApplyOpacity(opacity);
+            SyncOpacityMenu(opacity);
+        }
+
+        private void ApplyOpacity(int opacity)
+        {
+            // 计算 Alpha 通道值 (0-255) 并转换为 #AARRGGBB 格式
+            int alpha = (int)Math.Round(opacity / 100.0 * 255);
+            string hex = $"#{alpha:X2}FFFFFF";
+            var color = (System.Windows.Media.Color)
+                System.Windows.Media.ColorConverter.ConvertFromString(hex);
+            var brush = new System.Windows.Media.SolidColorBrush(color);
+
+            // 直接设置两个主窗口的 RootBorder.Background
+            _todoWindow.Dispatcher.Invoke(() =>
+            {
+                var border = ((System.Windows.FrameworkElement)_todoWindow.Content)
+                             as System.Windows.Controls.Border
+                             ?? _todoWindow.FindName("RootBorder") as System.Windows.Controls.Border;
+                if (border != null) border.Background = brush;
+            });
+            _pasteWindow.Dispatcher.Invoke(() =>
+            {
+                var border = _pasteWindow.FindName("RootBorder") as System.Windows.Controls.Border;
+                if (border != null) border.Background = brush;
+            });
+        }
+
+        private void SyncOpacityMenu(int currentOpacity)
+        {
+            for (int i = 0; i < _opacityLevels.Length; i++)
+            {
+                _opacityItems[i].IsChecked = (_opacityLevels[i] == currentOpacity);
+            }
         }
 
         private void ShowTodoWindow()

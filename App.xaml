@@ -18,7 +18,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border Background="#66000000"
+                        <Border Background="#4D000000"
                                 CornerRadius="{StaticResource Radius3}"
                                 Margin="1"/>
                     </ControlTemplate>
@@ -129,7 +129,7 @@
              WPF ContextMenu / MenuItem 现代 Fluent 隐式样式
         ══════════════════════════════════════════════ -->
         <Style TargetType="{x:Type ContextMenu}">
-            <Setter Property="Background" Value="#F2F5F5F5"/>
+            <Setter Property="Background" Value="#D9F5F5F5"/>
             <Setter Property="BorderBrush" Value="#22000000"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="2,4"/>
@@ -211,7 +211,7 @@
                                        Placement="Right"
                                        PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}">
                                     <Border x:Name="SubMenuBorder"
-                                            Background="#F2F5F5F5"
+                                            Background="#D9F5F5F5"
                                             BorderBrush="#22000000"
                                             BorderThickness="1"
                                             CornerRadius="8"
@@ -271,10 +271,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#22000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="#12000000"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#44000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="#24000000"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -306,7 +306,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#22000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="#12000000"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -318,13 +318,18 @@
              内联输入框（双击添加/搜索框）
         ══════════════════════════════════════════════ -->
         <Style x:Key="InlineTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="#CCFFFFFF"/>
-            <Setter Property="BorderBrush" Value="#44000000"/>
+            <Setter Property="Background" Value="#A6FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#1F000000"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="#222"/>
             <Setter Property="CaretBrush" Value="#555"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -334,8 +339,7 @@
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="{StaticResource Radius6}">
                                 <ScrollViewer x:Name="PART_ContentHost"
-                                              Margin="{TemplateBinding Padding}"
-                                              VerticalAlignment="Center"/>
+                                              Margin="{TemplateBinding Padding}"/>
                             </Border>
                             <!-- 自定义的水印文字 -->
                             <TextBlock x:Name="watermark" 
@@ -354,13 +358,13 @@
                                 </MultiTrigger.Conditions>
                                 <Setter TargetName="watermark" Property="Visibility" Value="Visible"/>
                             </MultiTrigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#DDFFFFFF"/>
-                            </Trigger>
-                            <Trigger Property="IsFocused" Value="True">
-                                <Setter Property="Background" Value="#EEFFFFFF"/>
-                                <Setter Property="BorderBrush" Value="#88000000"/>
-                            </Trigger>
+                              <Trigger Property="IsMouseOver" Value="True">
+                                  <Setter Property="Background" Value="#BFFFFFFF"/>
+                              </Trigger>
+                             <Trigger Property="IsFocused" Value="True">
+                                 <Setter Property="Background" Value="#F2FFFFFF"/>
+                                 <Setter Property="BorderBrush" Value="#44000000"/>
+                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
