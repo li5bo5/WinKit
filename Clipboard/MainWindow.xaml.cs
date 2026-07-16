@@ -24,6 +24,8 @@ namespace WinKit.Clipboard
         private double _resizeStartW, _resizeStartH;
         private Guid? _copiedItemId = null;
         private int _toastActiveCount = 0;
+        private System.Windows.Threading.DispatcherTimer? _clickTimer;
+        private ClipboardItem? _pendingClickItem;
 
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out POINT lpPoint);
@@ -56,6 +58,16 @@ namespace WinKit.Clipboard
             };
 
             Loaded += (s, e) => UpdateUIStates();
+            this.KeyDown += Window_KeyDown;
+        }
+
+        private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                Hide();
+                e.Handled = true;
+            }
         }
 
         private void UpdateUIStates()
@@ -135,20 +147,81 @@ namespace WinKit.Clipboard
             Hide();
         }
 
-        private void ClipboardList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (ClipboardList.SelectedItem is ClipboardItem item)
+            if (IsClickOnDeleteButton(e.OriginalSource as DependencyObject))
             {
-                UseSelectedItem(item);
+                return;
+            }
+
+            if (sender is ListBoxItem item && item.Content is ClipboardItem clipItem)
+            {
+                if (e.ClickCount == 1)
+                {
+                    _pendingClickItem = clipItem;
+                    if (_clickTimer == null)
+                    {
+                        _clickTimer = new System.Windows.Threading.DispatcherTimer();
+                        _clickTimer.Interval = TimeSpan.FromMilliseconds(250);
+                        _clickTimer.Tick += ClickTimer_Tick;
+                    }
+                    _clickTimer.Start();
+                }
+                else if (e.ClickCount >= 2)
+                {
+                    if (_clickTimer != null)
+                    {
+                        _clickTimer.Stop();
+                    }
+                    _pendingClickItem = null;
+                    UseSelectedItem(clipItem);
+                    e.Handled = true;
+                }
             }
         }
 
-        private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void ClickTimer_Tick(object? sender, EventArgs e)
         {
-            if (sender is ListBoxItem item && item.Content is ClipboardItem clipItem)
+            _clickTimer?.Stop();
+            if (_pendingClickItem != null)
             {
-                CopyItemToClipboard(clipItem);
+                var item = _pendingClickItem;
+                _pendingClickItem = null;
+                ClickItem(item);
             }
+        }
+
+        private void ClickItem(ClipboardItem item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.Content)) return;
+            try
+            {
+                System.Windows.Clipboard.SetText(item.Content);
+                _copiedItemId = item.Id;
+                _clipboardManager.MoveToTop(item);
+                
+                // 强行立即更新布局，确保置顶布局在隐藏窗口前已计算完成
+                ClipboardList.UpdateLayout();
+                
+                Hide();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"单击复制与置顶失败: {ex.Message}");
+            }
+        }
+
+        private bool IsClickOnDeleteButton(DependencyObject? obj)
+        {
+            while (obj != null)
+            {
+                if (obj is System.Windows.Controls.Button btn && btn.Name == "DeleteBtn")
+                {
+                    return true;
+                }
+                obj = System.Windows.Media.VisualTreeHelper.GetParent(obj);
+            }
+            return false;
         }
 
         private void ClipboardList_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
