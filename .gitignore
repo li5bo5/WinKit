@@ -30,3 +30,6 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+
+# 发布构建输出
+/Publish_Releases/

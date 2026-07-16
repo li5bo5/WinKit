@@ -62,8 +62,7 @@
                          ScrollViewer.CanContentScroll="True"
                          FocusVisualStyle="{x:Null}"
                          IsTabStop="False"
-                         KeyDown="ClipboardList_KeyDown"
-                         MouseDoubleClick="ClipboardList_MouseDoubleClick">
+                         KeyDown="ClipboardList_KeyDown">
 
                     <ListBox.Template>
                         <ControlTemplate TargetType="ListBox">

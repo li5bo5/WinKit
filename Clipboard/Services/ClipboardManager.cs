@@ -91,6 +91,13 @@ namespace WinKit.Clipboard.Services
                 
                 if (existingItem != null)
                 {
+                    if (_items.Count > 0 && _items[0] == existingItem)
+                    {
+                        existingItem.Timestamp = DateTime.Now;
+                        UpdateItemTimestampInDb(existingItem.Id, existingItem.Timestamp);
+                        return;
+                    }
+
                     _items.Remove(existingItem);
                     var newItem = new ClipboardItem
                     {
@@ -220,6 +227,39 @@ namespace WinKit.Clipboard.Services
             var command = connection.CreateCommand();
             command.CommandText = "DELETE FROM clipboard_items";
             command.ExecuteNonQuery();
+        }
+
+        public void MoveToTop(ClipboardItem item)
+        {
+            if (item == null) return;
+
+            var existing = _items.FirstOrDefault(i => i.Id == item.Id);
+            if (existing != null)
+            {
+                _items.Remove(existing);
+                existing.Timestamp = DateTime.Now;
+                _items.Insert(0, existing);
+                UpdateItemTimestampInDb(existing.Id, existing.Timestamp);
+            }
+        }
+
+        private void UpdateItemTimestampInDb(Guid id, DateTime newTimestamp)
+        {
+            try
+            {
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                connection.Open();
+
+                var command = connection.CreateCommand();
+                command.CommandText = "UPDATE clipboard_items SET timestamp = @timestamp WHERE id = @id";
+                command.Parameters.AddWithValue("@id", id.ToString());
+                command.Parameters.AddWithValue("@timestamp", newTimestamp.ToString("O"));
+                command.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"更新数据库时间戳失败: {ex.Message}");
+            }
         }
 
         public IEnumerable<ClipboardItem> Search(string query)
