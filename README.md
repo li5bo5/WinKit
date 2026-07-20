@@ -4,6 +4,14 @@
 
 ---
 
+## 📸 界面预览
+
+| 待办清单 (TodoList) | 剪贴板历史 (Clipboard) | 托盘右键菜单与设置 |
+| :---: | :---: | :---: |
+| ![TodoList](UI/todo1.png) | ![Clipboard](UI/Clipboard.png) | ![设置](UI/设置.png) |
+
+---
+
 ## ✨ 核心特性
 
 ### 1. 📂 TodoList (待办清单)
