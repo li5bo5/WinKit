@@ -18,6 +18,7 @@
     <ApplicationIcon>PTD.ico</ApplicationIcon>
     
     <!-- 优化发布选项 -->
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <DebugType>embedded</DebugType>
