@@ -44,6 +44,19 @@ namespace WinKit.Clipboard
             public int Y;
         }
 
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_NOACTIVATE = 0x08000000;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+        private bool _isPinned = false;
+        public bool IsPinned => _isPinned;
+
         public MainWindow(ClipboardManager clipboardManager, SettingsManager settingsManager)
         {
             InitializeComponent();
@@ -57,8 +70,45 @@ namespace WinKit.Clipboard
                 UpdateUIStates();
             };
 
-            Loaded += (s, e) => UpdateUIStates();
+            Loaded += (s, e) =>
+            {
+                UpdateUIStates();
+                LoadSettings();
+            };
             this.KeyDown += Window_KeyDown;
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            var hwnd = new WindowInteropHelper(this).Handle;
+            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        }
+
+        private void LoadSettings()
+        {
+            _isPinned = _settingsManager.Settings.PasteIsPinned;
+            this.Topmost = _isPinned;
+            PinBtn.Content = _isPinned ? "📍" : "📌";
+            PinBtn.ToolTip = _isPinned ? "取消置顶" : "置顶";
+        }
+
+        private void TogglePinState()
+        {
+            _isPinned = !_isPinned;
+            this.Topmost = _isPinned;
+            PinBtn.Content = _isPinned ? "📍" : "📌";
+            PinBtn.ToolTip = _isPinned ? "取消置顶" : "置顶";
+
+            var settings = _settingsManager.Settings;
+            settings.PasteIsPinned = _isPinned;
+            _settingsManager.SaveSettings(settings);
+        }
+
+        private void PinBtn_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePinState();
         }
 
         private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -78,7 +128,7 @@ namespace WinKit.Clipboard
         }
 
         /// <summary>
-        /// 根据鼠标位置智能弹出并激活窗口，防边缘溢出
+        /// 根据鼠标位置智能弹出窗口（不抢夺前台焦点，防止重命名框取消）
         /// </summary>
         public void ShowAtMouse()
         {
@@ -126,10 +176,12 @@ namespace WinKit.Clipboard
 
             Show();
             WindowState = WindowState.Normal;
-            Activate();
 
-            // 聚焦在列表容器上
-            ClipboardList.Focus();
+            // 如果未开启记忆滚动位置，则复位滚动条到最上面第一条
+            if (!_settingsManager.Settings.PasteRememberScrollPosition && _clipboardManager.Items.Count > 0)
+            {
+                ClipboardList.ScrollIntoView(_clipboardManager.Items.FirstOrDefault());
+            }
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -144,7 +196,10 @@ namespace WinKit.Clipboard
 
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            Hide();
+            if (!_isPinned)
+            {
+                Hide();
+            }
         }
 
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

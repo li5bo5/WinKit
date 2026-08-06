@@ -44,8 +44,9 @@ namespace WinKit.Common
         // 隐形焦点宿主窗口
         private readonly MenuHostWindow _menuHostWindow;
 
-        // 关于窗口
+        // 关于窗口与历史记录窗口
         private readonly AboutWindow _aboutWindow;
+        private readonly Todo.HistoryWindow _historyWindow;
 
         // WPF ContextMenu 容器
         private readonly ContextMenu _contextMenu;
@@ -57,11 +58,15 @@ namespace WinKit.Common
         private readonly MenuItem _todoPin;
         private readonly MenuItem _todoPassThrough;
 
+        // 历史记录顶级菜单项
+        private readonly MenuItem _itemHistory;
+
         // Clipboard 子菜单项
         private readonly MenuItem _pasteMenu;
         private readonly MenuItem _pasteShow;
         private readonly MenuItem _pasteClear;
         private readonly MenuItem _pasteDedup;
+        private readonly MenuItem _pasteRememberScroll;
         private readonly MenuItem _pasteMonitoring; // 剪贴板开启/关闭选项
 
         // 顶级菜单项
@@ -106,6 +111,10 @@ namespace WinKit.Common
             _aboutWindow.Show();
             _aboutWindow.Hide();
 
+            _historyWindow = new Todo.HistoryWindow((Todo.MainWindow)_todoWindow);
+            _historyWindow.Show();
+            _historyWindow.Hide();
+
             // ── 2. 创建 WPF ContextMenu ───────────────────────
             _contextMenu = new ContextMenu();
 
@@ -124,10 +133,15 @@ namespace WinKit.Common
             _todoPassThrough = new MenuItem { Header = "鼠标穿透" };
             _todoPassThrough.Click += (s, e) => ToggleTodoPassThrough();
 
+            _itemHistory = new MenuItem { Header = "历史记录" };
+            _itemHistory.Click += (s, e) => ShowHistoryWindow();
+
             _todoMenu.Items.Add(_todoShow);
             _todoMenu.Items.Add(_todoHide);
             _todoMenu.Items.Add(_todoPin);
             _todoMenu.Items.Add(_todoPassThrough);
+            _todoMenu.Items.Add(new Separator());
+            _todoMenu.Items.Add(_itemHistory);
 
             // ── 4. 组建 Clipboard 子菜单 ───────────────────────
             _pasteMenu = new MenuItem { Header = "Clipboard" };
@@ -143,6 +157,11 @@ namespace WinKit.Common
             _pasteDedup.IsChecked = _settingsManager.Settings.PasteEnableTextDeduplication;
             _pasteDedup.Click += (s, e) => TogglePasteDedup();
 
+            _pasteRememberScroll = new MenuItem { Header = "记忆滚动" };
+            _pasteRememberScroll.IsCheckable = true;
+            _pasteRememberScroll.IsChecked = _settingsManager.Settings.PasteRememberScrollPosition;
+            _pasteRememberScroll.Click += (s, e) => TogglePasteRememberScroll();
+
             _pasteMonitoring = new MenuItem { Header = "启用" };
             _pasteMonitoring.IsCheckable = true;
             _pasteMonitoring.IsChecked = _settingsManager.Settings.PasteEnableMonitoring;
@@ -151,6 +170,7 @@ namespace WinKit.Common
             _pasteMenu.Items.Add(_pasteShow);
             _pasteMenu.Items.Add(_pasteClear);
             _pasteMenu.Items.Add(_pasteDedup);
+            _pasteMenu.Items.Add(_pasteRememberScroll);
             _pasteMenu.Items.Add(_pasteMonitoring);
 
             // ── 5. 组建不透明度子菜单 ──────────────────────
@@ -219,7 +239,8 @@ namespace WinKit.Common
             int targetWidth = smallWidth <= 16 ? 32 : (smallWidth <= 24 ? 32 : 48);
             int targetHeight = smallHeight <= 16 ? 32 : (smallHeight <= 24 ? 32 : 48);
             var trayIcon = iconStream != null ? new Icon(iconStream, new System.Drawing.Size(targetWidth, targetHeight)) : SystemIcons.Application;
-            var version = asm.GetName().Version?.ToString(3) ?? "1.0.0";
+            var vObj = asm.GetName().Version;
+            var version = vObj != null ? (vObj.Build > 0 ? vObj.ToString(3) : $"{vObj.Major}.{vObj.Minor}") : "2.0";
 
             _icon = new SWF.NotifyIcon
             {
@@ -315,6 +336,7 @@ namespace WinKit.Common
             _pasteDedup.IsEnabled = clipboardEnabled;
 
             _pasteDedup.IsChecked = _settingsManager.Settings.PasteEnableTextDeduplication;
+            _pasteRememberScroll.IsChecked = _settingsManager.Settings.PasteRememberScrollPosition;
             _pasteMonitoring.IsChecked = clipboardEnabled;
             _itemAutoStart.IsChecked = AutoStartHelper.IsAutoStartEnabled();
 
@@ -448,6 +470,23 @@ namespace WinKit.Common
             SyncMenuStates();
         }
 
+        private void ShowHistoryWindow()
+        {
+            _historyWindow.Dispatcher.Invoke(() =>
+            {
+                _historyWindow.ReloadHistory();
+                _historyWindow.Show();
+                _historyWindow.Activate();
+            });
+        }
+
+        private void TogglePasteRememberScroll()
+        {
+            var settings = _settingsManager.Settings;
+            settings.PasteRememberScrollPosition = _pasteRememberScroll.IsChecked;
+            _settingsManager.SaveSettings(settings);
+        }
+
         private void ShowAboutWindow()
         {
             _aboutWindow.Dispatcher.Invoke(() =>
@@ -462,6 +501,7 @@ namespace WinKit.Common
             _todoWindow.Dispatcher.Invoke(() => _todoWindow.Close());
             _pasteWindow.Dispatcher.Invoke(() => _pasteWindow.Close());
             _aboutWindow.Dispatcher.Invoke(() => _aboutWindow.Close());
+            _historyWindow.Dispatcher.Invoke(() => _historyWindow.Close());
             _menuHostWindow.Dispatcher.Invoke(() => _menuHostWindow.Close());
             _app.Shutdown();
         }
@@ -471,6 +511,7 @@ namespace WinKit.Common
             _clickTimer.Dispose();
             _icon.Dispose();
             _aboutWindow.Dispatcher.Invoke(() => _aboutWindow.Close());
+            _historyWindow.Dispatcher.Invoke(() => _historyWindow.Close());
             _menuHostWindow.Dispatcher.Invoke(() => _menuHostWindow.Close());
         }
     }

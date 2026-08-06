@@ -20,18 +20,25 @@ namespace WinKit.Common
             var version = Assembly.GetExecutingAssembly().GetName().Version;
             if (version != null)
             {
-                VersionText.Text = $"v{version.ToString(3)}";
+                string vStr = (version.Build > 0) ? version.ToString(3) : $"{version.Major}.{version.Minor}";
+                VersionText.Text = $"v{vStr}";
             }
         }
 
-        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 1) DragMove();
+            // 支持点击窗口任意空白区域进行拖动
+            if (e.LeftButton == MouseButtonState.Pressed) DragMove();
         }
 
-        private void CloseBtn_Click(object sender, RoutedEventArgs e)
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            Hide();
+            // 监听 Esc 键，按下时隐藏窗口
+            if (e.Key == System.Windows.Input.Key.Escape)
+            {
+                Hide();
+                e.Handled = true;
+            }
         }
 
         private void Window_Deactivated(object sender, EventArgs e)

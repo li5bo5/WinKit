@@ -28,13 +28,9 @@ namespace WinKit.Todo
         {
             if (e.Key == WinInput.Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
             {
-                var text = InputBox.Text.Trim();
-                if (!string.IsNullOrEmpty(text))
-                {
-                    ResultText   = text;
-                    DialogResult = true;
-                }
-                e.Handled = true;
+                ResultText   = InputBox.Text.Trim();
+                DialogResult = true;
+                e.Handled    = true;
             }
             else if (e.Key == WinInput.Key.Escape)
             {
