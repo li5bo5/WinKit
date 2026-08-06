@@ -11,7 +11,7 @@
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
         PreviewMouseDoubleClick="Window_PreviewMouseDoubleClick"
-        ResizeMode="CanResize">
+        ResizeMode="NoResize">
 
     <!-- 主容器：圆角边框 + 60% 不透明白色背景 -->
     <Border x:Name="RootBorder"

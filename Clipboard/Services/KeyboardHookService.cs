@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace WinKit.Clipboard.Services
 {
     /// <summary>
-    /// 全局低级键盘钩子服务 — 专门拦截 Win + V 热键，防止系统剪贴板弹出
+    /// 全局低级键盘钩子服务 — 专门拦截 Win + V 热键，防止系统剪贴板弹出且不破坏前台编辑框焦点
     /// </summary>
     public class KeyboardHookService : IDisposable
     {
@@ -15,6 +15,7 @@ namespace WinKit.Clipboard.Services
         private const int VK_LWIN = 0x5B;
         private const int VK_RWIN = 0x5C;
         private const int VK_V = 0x56;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
 
         private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -68,23 +69,23 @@ namespace WinKit.Clipboard.Services
                 int vkCode = Marshal.ReadInt32(lParam);
                 int message = wParam.ToInt32();
 
-                // 当按下 V 键且为 KeyDown 事件时
+                // 当按下 V 键且为 KeyDown/SYSKEYDOWN 事件时
                 if (vkCode == VK_V && (message == WM_KEYDOWN || message == WM_SYSKEYDOWN))
                 {
-                    // 实时检查物理键盘上 Left Windows 或 Right Windows 键是否处于按下状态
+                    // 检查左右 Win 键物理状态
                     bool isLWinPressed = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0;
                     bool isRWinPressed = (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
 
                     if (isLWinPressed || isRWinPressed)
                     {
-                        // 触发外部回调
+                        // 触发 Win+V 剪贴板回调
                         _onWinVPressed();
 
-                        // 注入 0xFF 空击键以防松开 Win 时弹出开始菜单
+                        // 注入 0xFF 虚拟击键，防止松开 Win 键时弹出系统开始菜单
                         keybd_event(0xFF, 0, 0, UIntPtr.Zero);
-                        keybd_event(0xFF, 0, 2, UIntPtr.Zero);
+                        keybd_event(0xFF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
 
-                        // 返回 1 吞掉该事件，阻止 Windows 原生剪切板弹出
+                        // 拦截此按键，防止 Win10/Win11 原生剪贴板弹出
                         return (IntPtr)1;
                     }
                 }

@@ -18,5 +18,7 @@ namespace WinKit.Common
         public int PasteMaxItems { get; set; } = 100;
         public bool PasteEnableTextDeduplication { get; set; } = true;
         public bool PasteEnableMonitoring { get; set; } = true;
+        public bool PasteRememberScrollPosition { get; set; } = false;
+        public bool PasteIsPinned { get; set; } = false;
     }
 }

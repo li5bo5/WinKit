@@ -11,7 +11,7 @@
         Topmost="True"
         WindowStartupLocation="Manual"
         Deactivated="Window_Deactivated"
-        ResizeMode="CanResize">
+        ResizeMode="NoResize">
 
     <!-- 主容器：圆角边框 + 60% 不透明白色背景 (#99FFFFFF) -->
     <Border x:Name="RootBorder"
@@ -40,14 +40,23 @@
                            FontWeight="SemiBold"
                            Foreground="#333"/>
 
-                <Button x:Name="CloseBtn"
-                        Content="✕"
-                        Style="{StaticResource TitleBarBtn}"
-                        HorizontalAlignment="Right"
-                        Margin="0,0,4,0"
-                        Opacity="1"
-                        Click="CloseBtn_Click"
-                        ToolTip="隐藏"/>
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,0,4,0">
+                    <Button x:Name="PinBtn"
+                            Content="📌"
+                            Style="{StaticResource TitleBarBtn}"
+                            Opacity="1"
+                            Click="PinBtn_Click"
+                            ToolTip="置顶"/>
+
+                    <Button x:Name="CloseBtn"
+                            Content="✕"
+                            Style="{StaticResource TitleBarBtn}"
+                            Opacity="1"
+                            Click="CloseBtn_Click"
+                            ToolTip="隐藏"/>
+                </StackPanel>
             </Grid>
 
             <!-- ══════════════════════════════════════════

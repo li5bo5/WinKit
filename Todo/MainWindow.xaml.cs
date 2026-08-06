@@ -30,6 +30,7 @@ namespace WinKit.Todo
 
         private readonly ObservableCollection<TodoItem> _items = new();
         private readonly MarkdownStorage _storage;
+        private readonly HistoryStorage _historyStorage;
         private readonly SettingsManager _settingsManager;
         private bool _isUpdatingText = false;
 
@@ -106,6 +107,7 @@ namespace WinKit.Todo
             new WindowInteropHelper(this).EnsureHandle();
 
             _storage = new MarkdownStorage();
+            _historyStorage = new HistoryStorage();
             foreach (var item in _storage.LoadTodos())
                 _items.Add(item);
             TodoList.ItemsSource = _items;
@@ -569,16 +571,41 @@ namespace WinKit.Todo
             if (item != null) ShowEditDialog(item);
         }
 
+        public void AddTodoItem(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title)) return;
+            _items.Add(new TodoItem { Title = title });
+            _storage.SaveTodos(_items);
+            if (_items.Count > 0)
+                TodoList.ScrollIntoView(_items[^1]);
+        }
+
+        public void DeleteTodoItem(TodoItem item)
+        {
+            if (item == null) return;
+            _historyStorage.AddHistory(item.Title);
+            _items.Remove(item);
+            _storage.SaveTodos(_items);
+        }
+
         private void ShowEditDialog(TodoItem item)
         {
             var dlg = new EditDialog(item.Title) { Owner = this };
-            if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultText))
+            if (dlg.ShowDialog() == true)
             {
-                item.Title = dlg.ResultText;
-                var idx = _items.IndexOf(item);
-                _items.RemoveAt(idx);
-                _items.Insert(idx, item);
-                _storage.SaveTodos(_items);
+                if (string.IsNullOrWhiteSpace(dlg.ResultText))
+                {
+                    // 空值即删除
+                    DeleteTodoItem(item);
+                }
+                else
+                {
+                    item.Title = dlg.ResultText;
+                    var idx = _items.IndexOf(item);
+                    _items.RemoveAt(idx);
+                    _items.Insert(idx, item);
+                    _storage.SaveTodos(_items);
+                }
             }
         }
 
@@ -586,7 +613,10 @@ namespace WinKit.Todo
         {
             var id   = (Guid)((WinButton)sender).Tag;
             var item = _items.FirstOrDefault(i => i.Id == id);
-            if (item != null) { _items.Remove(item); _storage.SaveTodos(_items); }
+            if (item != null)
+            {
+                DeleteTodoItem(item);
+            }
         }
 
         // ══════════════════════════════════════════════

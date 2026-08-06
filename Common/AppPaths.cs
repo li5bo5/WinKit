@@ -21,6 +21,11 @@ namespace WinKit.Common
         public static readonly string Todos = Path.Combine(AppData, "todos.md");
 
         /// <summary>
+        /// 历史记录保存路径 (history.md)
+        /// </summary>
+        public static readonly string History = Path.Combine(AppData, "history.md");
+
+        /// <summary>
         /// SQLite 剪贴板数据库路径 (clipboard.db)
         /// </summary>
         public static readonly string Database = Path.Combine(AppData, "clipboard.db");
