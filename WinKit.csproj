@@ -37,4 +37,9 @@
     <EmbeddedResource Include="PTD.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 将快捷键配置文件复制到输出目录（与 WinKit.exe 同目录） -->
+    <None Include="config.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

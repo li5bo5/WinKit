@@ -12,6 +12,7 @@ namespace WinKit
         private ClipboardManager? _clipboardManager;
         private KeyboardHookService? _keyboardHookService;
         private TrayHelper? _trayHelper;
+        private GlobalHotkeyHookService? _todoHotkeyService;
 
         private Todo.MainWindow? _todoWindow;
         private Clipboard.MainWindow? _pasteWindow;
@@ -49,6 +50,9 @@ namespace WinKit
             {
                 RegisterGlobalKeyboardHook();
             }
+
+            // 根据软件目录下 config.json 注册 TodoList 显示/隐藏的全局快捷键
+            RegisterTodoToggleHotkey();
 
             // 6. 默认展现 TodoList 待办主窗口
             _todoWindow.Show();
@@ -98,10 +102,43 @@ namespace WinKit
             });
         }
 
+        /// <summary>
+        /// 读取软件目录下的 config.json（{"toggleHotkey": "Ctrl + ~"}），
+        /// 注册用于快速显示/隐藏 TodoList 主窗口的全局快捷键
+        /// </summary>
+        private void RegisterTodoToggleHotkey()
+        {
+            var config = HotkeyConfigManager.Load();
+            if (!HotkeyDefinition.TryParse(config.ToggleHotkey, out var hotkey) || hotkey == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"App: config.json 中的 toggleHotkey 无效 - {config.ToggleHotkey}");
+                return;
+            }
+
+            _todoHotkeyService = new GlobalHotkeyHookService(hotkey, () =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (_todoWindow == null) return;
+
+                    if (_todoWindow.IsVisible)
+                    {
+                        _todoWindow.Hide();
+                    }
+                    else
+                    {
+                        _todoWindow.Show();
+                        _todoWindow.Activate();
+                    }
+                });
+            });
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             // 优雅释放所有非托管钩子和资源
             _keyboardHookService?.Dispose();
+            _todoHotkeyService?.Dispose();
             _clipboardService?.Dispose();
             _trayHelper?.Dispose();
             _clipboardManager?.Dispose();
