@@ -71,8 +71,12 @@ namespace WinKit.Common
 
         // 顶级菜单项
         private readonly MenuItem _itemAutoStart;
-        private readonly MenuItem _itemAbout; // 关于选项
+        private readonly MenuItem _itemHotkey;  // 自定义快捷键
+        private readonly MenuItem _itemAbout;   // 关于选项
         private readonly MenuItem _itemExit;
+
+        // 快捷键设置窗口
+        private readonly HotkeySettingsWindow _hotkeySettingsWindow;
 
         // 不透明度子菜单
         private readonly MenuItem _opacityMenu;
@@ -198,21 +202,31 @@ namespace WinKit.Common
                 AutoStartHelper.SetAutoStart(_itemAutoStart.IsChecked);
             };
 
-            // ── 7. 组建关于顶级菜单 ───────────────────────────
+            // ── 7. 自定义快捷键菜单 ──────────────────────────
+            _itemHotkey = new MenuItem { Header = "快捷键" };
+            _itemHotkey.Click += (s, e) => ShowHotkeySettings();
+
+            // ── 8. 快捷键设置窗口（预创建，复用同一实例）────
+            _hotkeySettingsWindow = new HotkeySettingsWindow(_settingsManager);
+            _hotkeySettingsWindow.Show();
+            _hotkeySettingsWindow.Hide();
+
+            // ── 9. 组建关于顶级菜单 ───────────────────────────
             _itemAbout = new MenuItem { Header = "关于" };
             _itemAbout.Click += (s, e) => ShowAboutWindow();
 
-            // ── 8. 组建退出顶级菜单 ───────────────────────────
+            // ── 10. 组建退出顶级菜单 ──────────────────────────
             _itemExit = new MenuItem { Header = "退出" };
             _itemExit.Click += (s, e) => ShutdownApp();
 
-            // ── 9. 上下文菜单组装 ──────────────────────────────
+            // ── 11. 上下文菜单组装 ────────────────────────────
             _contextMenu.Items.Add(_todoMenu);
             _contextMenu.Items.Add(_pasteMenu);
             _contextMenu.Items.Add(new Separator());
             _contextMenu.Items.Add(_opacityMenu);
             _contextMenu.Items.Add(new Separator());
             _contextMenu.Items.Add(_itemAutoStart);
+            _contextMenu.Items.Add(_itemHotkey);
             _contextMenu.Items.Add(_itemAbout);
             _contextMenu.Items.Add(new Separator());
             _contextMenu.Items.Add(_itemExit);
@@ -240,7 +254,7 @@ namespace WinKit.Common
             int targetHeight = smallHeight <= 16 ? 32 : (smallHeight <= 24 ? 32 : 48);
             var trayIcon = iconStream != null ? new Icon(iconStream, new System.Drawing.Size(targetWidth, targetHeight)) : SystemIcons.Application;
             var vObj = asm.GetName().Version;
-            var version = vObj != null ? (vObj.Build > 0 ? vObj.ToString(3) : $"{vObj.Major}.{vObj.Minor}") : "2.0";
+            var version = vObj != null ? (vObj.Build > 0 ? vObj.ToString(3) : $"{vObj.Major}.{vObj.Minor}") : "2.1";
 
             _icon = new SWF.NotifyIcon
             {
@@ -496,12 +510,28 @@ namespace WinKit.Common
             });
         }
 
+        private void ShowHotkeySettings()
+        {
+            _todoWindow.Dispatcher.Invoke(() =>
+            {
+                _hotkeySettingsWindow.Show();
+                _hotkeySettingsWindow.Activate();
+            });
+        }
+
+        /// <summary>向外暴露快捷键设置窗口的 HotkeysChanged 事件订阅入口</summary>
+        public void SubscribeHotkeysChanged(Action callback)
+        {
+            _hotkeySettingsWindow.HotkeysChanged += callback;
+        }
+
         private void ShutdownApp()
         {
             _todoWindow.Dispatcher.Invoke(() => _todoWindow.Close());
             _pasteWindow.Dispatcher.Invoke(() => _pasteWindow.Close());
             _aboutWindow.Dispatcher.Invoke(() => _aboutWindow.Close());
             _historyWindow.Dispatcher.Invoke(() => _historyWindow.Close());
+            _hotkeySettingsWindow.Dispatcher.Invoke(() => _hotkeySettingsWindow.Close());
             _menuHostWindow.Dispatcher.Invoke(() => _menuHostWindow.Close());
             _app.Shutdown();
         }
@@ -512,6 +542,7 @@ namespace WinKit.Common
             _icon.Dispose();
             _aboutWindow.Dispatcher.Invoke(() => _aboutWindow.Close());
             _historyWindow.Dispatcher.Invoke(() => _historyWindow.Close());
+            _hotkeySettingsWindow.Dispatcher.Invoke(() => _hotkeySettingsWindow.Close());
             _menuHostWindow.Dispatcher.Invoke(() => _menuHostWindow.Close());
         }
     }

@@ -48,6 +48,10 @@ namespace WinKit.Todo
         private bool _isPassThrough = false;
         private System.Windows.Threading.DispatcherTimer? _passThroughTimer;
 
+        // 10 秒临时显示倒计时
+        private System.Windows.Threading.DispatcherTimer? _tempShowTimer;
+        private bool _isTempShow = false; // 当前是否处于临时显示模式
+
         // 托盘引用（用于同步状态）
         private TrayHelper? _tray;
         public bool IsPinned      => _isPinned;
@@ -128,10 +132,44 @@ namespace WinKit.Todo
             UpdateEmptyPlaceholder();
 
             // 根据置顶或穿透状态决定标题栏按钮初始透明度
-            Loaded += (s, e) => { 
+            Loaded += (s, e) =>
+            { 
                 UpdateEmptyPlaceholder(); 
                 SetTitleButtonsOpacity((_isPinned || _isPassThrough) ? 1 : 0); 
             };
+
+            // 10 秒临时显示定时器
+            _tempShowTimer = new System.Windows.Threading.DispatcherTimer();
+            _tempShowTimer.Interval = TimeSpan.FromSeconds(10);
+            _tempShowTimer.Tick += (s, e) =>
+            {
+                _tempShowTimer.Stop();
+                if (_isTempShow) { _isTempShow = false; Hide(); }
+            };
+
+            // 鼠标移动 / 键盘操作刷新临时显示倒计时
+            PreviewMouseMove += (s, e) => RefreshTempShowTimer();
+            PreviewKeyDown   += (s, e) => RefreshTempShowTimer();
+            
+            // 全局快捷键/双击逻辑
+            PreviewMouseLeftButtonDown += (s, e) => {
+                if (e.ClickCount == 2) {
+                    var focusedElement = FocusManager.GetFocusedElement(this);
+                    if (focusedElement is System.Windows.Controls.TextBox) {
+                        Keyboard.ClearFocus();
+                        FocusManager.SetFocusedElement(this, this);
+                    }
+                }
+            };
+        }
+
+        private void RefreshTempShowTimer()
+        {
+            if (_isTempShow)
+            {
+                _tempShowTimer?.Stop();
+                _tempShowTimer?.Start();
+            }
         }
 
         // ══════════════════════════════════════════════
@@ -418,24 +456,26 @@ namespace WinKit.Todo
         // ══════════════════════════════════════════════
         private void Window_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (InlineInputArea.Visibility != Visibility.Visible) return;
-
-            var src = e.OriginalSource as DependencyObject;
-            while (src != null)
+            // 若内联输入框当前显示中
+            if (InlineInputArea.Visibility == Visibility.Visible)
             {
-                if (src == PinBtn || src == PassThroughBtn || src == CloseBtn)
+                // 判断双击是否在输入框内部
+                var src = e.OriginalSource as DependencyObject;
+                bool isInsideEditBox = false;
+                while (src != null)
                 {
-                    return;
+                    if (src == InlineEditBox) { isInsideEditBox = true; break; }
+                    src = System.Windows.Media.VisualTreeHelper.GetParent(src);
                 }
-                if (src == InlineEditBox)
-                {
-                    return;
-                }
-                src = System.Windows.Media.VisualTreeHelper.GetParent(src);
-            }
 
-            CommitInlineInput();
-            e.Handled = true;
+                if (!isInsideEditBox)
+                {
+                    // 输入框外双击：退出输入状态（放弃未提交的临时输入）
+                    HideInlineInput();
+                    e.Handled = true;
+                    return;
+                }
+            }
         }
 
         private void TodoList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -471,11 +511,21 @@ namespace WinKit.Todo
 
         private void InlineEditBox_PreviewKeyDown(object sender, WinKey e)
         {
+            // Enter（无 Shift）：提交
             if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
             {
                 CommitInlineInput();
                 e.Handled = true;
             }
+            // Win+S 或单独 Ctrl+S：保存并退出
+            else if (e.Key == Key.S &&
+                     ((Keyboard.Modifiers & ModifierKeys.Windows) != 0 ||
+                      (Keyboard.Modifiers & ModifierKeys.Control) != 0))
+            {
+                CommitInlineInput();
+                e.Handled = true;
+            }
+            // Esc：退出输入状态
             else if (e.Key == Key.Escape)
             {
                 HideInlineInput();
@@ -730,6 +780,27 @@ namespace WinKit.Todo
             settings.TodoIsPinned = _isPinned;
             settings.TodoIsPassThrough = _isPassThrough;
             _settingsManager.SaveSettings(settings);
+        }
+
+        // ══════════════════════════════════════════════
+        // 临时显示：快捷键唤出，10 秒无操作自动隐藏
+        // ══════════════════════════════════════════════
+        public void ShowTemporary()
+        {
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
+            else
+            {
+                Activate();
+            }
+
+            // 标记为临时显示模式，并重置倒计时
+            _isTempShow = true;
+            _tempShowTimer?.Stop();
+            _tempShowTimer?.Start();
         }
     }
 }
