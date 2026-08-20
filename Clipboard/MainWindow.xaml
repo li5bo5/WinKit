@@ -48,7 +48,7 @@
                             Style="{StaticResource TitleBarBtn}"
                             Opacity="1"
                             Click="PinBtn_Click"
-                            ToolTip="置顶"/>
+                            ToolTip="固定（粘贴后不消失）"/>
 
                     <Button x:Name="CloseBtn"
                             Content="✕"

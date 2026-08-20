@@ -29,7 +29,7 @@
             <!-- 应用名 & 版本 -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
                 <TextBlock Text="WinKit" FontSize="18" FontWeight="Bold" Foreground="#222"/>
-                <TextBlock x:Name="VersionText" Text="v2.0" FontSize="12" Foreground="#888" Margin="6,0,0,2" VerticalAlignment="Bottom"/>
+                <TextBlock x:Name="VersionText" Text="v2.1" FontSize="12" Foreground="#888" Margin="6,0,0,2" VerticalAlignment="Bottom"/>
             </StackPanel>
 
             <!-- 信息表格 -->

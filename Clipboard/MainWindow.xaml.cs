@@ -18,99 +18,137 @@ namespace WinKit.Clipboard
     public partial class MainWindow : Window
     {
         private readonly ClipboardManager _clipboardManager;
-        private readonly SettingsManager _settingsManager;
-        private bool _isResizing = false;
+        private readonly SettingsManager  _settingsManager;
+
+        // ── 拖拽调整大小 ───────────────────────────────
+        private bool     _isResizing = false;
         private WinPoint _resizeStart;
-        private double _resizeStartW, _resizeStartH;
-        private Guid? _copiedItemId = null;
-        private int _toastActiveCount = 0;
+        private double   _resizeStartW, _resizeStartH;
+
+        // ── Toast 计数 ─────────────────────────────────
+        private int           _toastActiveCount = 0;
+
+        // ── 单击/双击区分定时器 ────────────────────────
         private System.Windows.Threading.DispatcherTimer? _clickTimer;
         private ClipboardItem? _pendingClickItem;
+        private Guid?          _copiedItemId = null;
 
-        [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
+        // ── 前台目标窗口句柄（呼出剪贴板前的活动窗口） ──
+        private IntPtr _lastTargetHwnd = IntPtr.Zero;
 
-        [DllImport("user32.dll")]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+        // ── 全局鼠标点击监听（用于精准外部点击隐藏）────
+        private readonly GlobalMouseClickMonitor _mouseMonitor = new();
 
-        private const byte VK_CONTROL = 0x11;
-        private const byte VK_V = 0x56;
+        // ── Pin（固定）状态 ────────────────────────────
+        private bool _isPinned = false;
+        public  bool IsPinned  => _isPinned;
+
+        // ── Win32 P/Invoke ─────────────────────────────
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
+        [DllImport("user32.dll")] private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")] private static extern int  GetWindowLong(IntPtr hwnd, int index);
+        [DllImport("user32.dll")] private static extern int  SetWindowLong(IntPtr hwnd, int index, int newStyle);
+        [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+                                                                           int x, int y, int cx, int cy, uint uFlags);
+
+        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X; public int Y; }
+
+        private const int  GWL_EXSTYLE      = -20;
+        private const int  WS_EX_NOACTIVATE = 0x08000000;
+        private const int  WS_EX_TOOLWINDOW = 0x00000080;
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private const uint SWP_NOSIZE       = 0x0001;
+        private const uint SWP_NOMOVE       = 0x0002;
+        private const uint SWP_NOACTIVATE   = 0x0010;
+        private const uint SWP_SHOWWINDOW   = 0x0040;
+
+        private const byte VK_CONTROL     = 0x11;
+        private const byte VK_V           = 0x56;
         private const byte KEYEVENTF_KEYUP = 0x0002;
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int X;
-            public int Y;
-        }
-
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_NOACTIVATE = 0x08000000;
-        private const int WS_EX_TOOLWINDOW = 0x00000080;
-
-        [DllImport("user32.dll")]
-        private static extern int GetWindowLong(IntPtr hwnd, int index);
-
-        [DllImport("user32.dll")]
-        private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
-
-        private bool _isPinned = false;
-        public bool IsPinned => _isPinned;
-
+        // ══════════════════════════════════════════════
+        // 构造函数
+        // ══════════════════════════════════════════════
         public MainWindow(ClipboardManager clipboardManager, SettingsManager settingsManager)
         {
             InitializeComponent();
             _clipboardManager = clipboardManager;
-            _settingsManager = settingsManager;
+            _settingsManager  = settingsManager;
 
             ClipboardList.ItemsSource = _clipboardManager.Items;
 
-            ((System.Collections.Specialized.INotifyCollectionChanged)_clipboardManager.Items).CollectionChanged += (s, e) =>
-            {
-                UpdateUIStates();
-            };
+            ((System.Collections.Specialized.INotifyCollectionChanged)_clipboardManager.Items)
+                .CollectionChanged += (s, e) => UpdateUIStates();
 
             Loaded += (s, e) =>
             {
                 UpdateUIStates();
                 LoadSettings();
             };
+
             this.KeyDown += Window_KeyDown;
+
+            // 窗口可见性变化：隐藏时停止鼠标监听
+            this.IsVisibleChanged += (s, e) =>
+            {
+                if (!(bool)e.NewValue) _mouseMonitor.Stop();
+            };
+
+            // 配置鼠标点击监听 — 点击剪贴板窗口以外的区域时，若未固定则隐藏
+            _mouseMonitor.ClickedOutside += OnClickedOutsideWindow;
         }
 
+        // ══════════════════════════════════════════════
+        // 初始化 — 设置 WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW
+        // ══════════════════════════════════════════════
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
-            var hwnd = new WindowInteropHelper(this).Handle;
+            var hwnd    = new WindowInteropHelper(this).Handle;
             int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
         }
 
+        // ══════════════════════════════════════════════
+        // 设置加载与保存
+        // ══════════════════════════════════════════════
         private void LoadSettings()
         {
-            _isPinned = _settingsManager.Settings.PasteIsPinned;
-            this.Topmost = _isPinned;
-            PinBtn.Content = _isPinned ? "📍" : "📌";
-            PinBtn.ToolTip = _isPinned ? "取消置顶" : "置顶";
+            _isPinned      = _settingsManager.Settings.PasteIsPinned;
+            this.Topmost   = _isPinned;
+            UpdatePinButton();
+        }
+
+        private void UpdatePinButton()
+        {
+            PinBtn.Content  = _isPinned ? "📍" : "📌";
+            PinBtn.ToolTip  = _isPinned ? "取消固定" : "固定（粘贴后不消失）";
         }
 
         private void TogglePinState()
         {
-            _isPinned = !_isPinned;
-            this.Topmost = _isPinned;
-            PinBtn.Content = _isPinned ? "📍" : "📌";
-            PinBtn.ToolTip = _isPinned ? "取消置顶" : "置顶";
+            _isPinned      = !_isPinned;
+            this.Topmost   = _isPinned;
+            UpdatePinButton();
 
             var settings = _settingsManager.Settings;
             settings.PasteIsPinned = _isPinned;
             _settingsManager.SaveSettings(settings);
+
+            // 固定状态变更：重新挂接或停止鼠标监听
+            if (IsVisible) RefreshMouseMonitor();
         }
 
-        private void PinBtn_Click(object sender, RoutedEventArgs e)
-        {
-            TogglePinState();
-        }
+        private void PinBtn_Click(object sender, RoutedEventArgs e) => TogglePinState();
 
+        // ══════════════════════════════════════════════
+        // Esc 退出
+        // ══════════════════════════════════════════════
         private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
@@ -120,114 +158,160 @@ namespace WinKit.Clipboard
             }
         }
 
+        // ══════════════════════════════════════════════
+        // UI 状态更新
+        // ══════════════════════════════════════════════
         private void UpdateUIStates()
         {
-            int count = _clipboardManager.Items.Count;
-            CountText.Text = $"{count} 项";
+            int count       = _clipboardManager.Items.Count;
+            CountText.Text  = $"{count} 项";
             EmptyPlaceholder.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        /// <summary>
-        /// 根据鼠标位置智能弹出窗口（不抢夺前台焦点，防止重命名框取消）
-        /// </summary>
+        // ══════════════════════════════════════════════
+        // ShowAtMouse — 在鼠标附近弹出并强制置于最顶层
+        // ══════════════════════════════════════════════
         public void ShowAtMouse()
         {
-            POINT mousePos;
-            GetCursorPos(out mousePos);
+            // ① 呼出前立即记录当前前台窗口（用户正在打字的窗口）
+            IntPtr fgWnd = GetForegroundWindow();
+            // 排除自身窗口与无效句柄
+            var selfHwnd = new WindowInteropHelper(this).Handle;
+            if (fgWnd != IntPtr.Zero && fgWnd != selfHwnd && IsWindow(fgWnd))
+                _lastTargetHwnd = fgWnd;
 
+            // ② 计算弹出位置
+            GetCursorPos(out POINT mousePos);
             var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(mousePos.X, mousePos.Y));
-            var area = screen.WorkingArea;
+            var area   = screen.WorkingArea;
 
-            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
-            double dpiScaleX = dpi.DpiScaleX;
-            double dpiScaleY = dpi.DpiScaleY;
+            var dpi        = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+            double dpiX    = dpi.DpiScaleX;
+            double dpiY    = dpi.DpiScaleY;
 
-            double mouseX = mousePos.X / dpiScaleX;
-            double mouseY = mousePos.Y / dpiScaleY;
+            double mouseX  = mousePos.X / dpiX;
+            double mouseY  = mousePos.Y / dpiY;
+            double workL   = area.Left   / dpiX;
+            double workT   = area.Top    / dpiY;
+            double workR   = area.Right  / dpiX;
+            double workB   = area.Bottom / dpiY;
 
-            double workLeft = area.Left / dpiScaleX;
-            double workTop = area.Top / dpiScaleY;
-            double workRight = area.Right / dpiScaleX;
-            double workBottom = area.Bottom / dpiScaleY;
+            double left = mouseX + 10;
+            double top  = mouseY + 10;
 
-            double targetLeft = mouseX + 10;
-            double targetTop = mouseY + 10;
+            if (left + Width  > workR) left = mouseX - Width  - 10;
+            if (left          < workL) left = workL;
+            if (top  + Height > workB) top  = mouseY - Height - 10;
+            if (top           < workT) top  = workT;
 
-            if (targetLeft + Width > workRight)
-            {
-                targetLeft = mouseX - Width - 10;
-            }
-            if (targetLeft < workLeft)
-            {
-                targetLeft = workLeft;
-            }
+            Left = left;
+            Top  = top;
 
-            if (targetTop + Height > workBottom)
-            {
-                targetTop = mouseY - Height - 10;
-            }
-            if (targetTop < workTop)
-            {
-                targetTop = workTop;
-            }
-
-            Left = targetLeft;
-            Top = targetTop;
-
+            // ③ 显示窗口并强制置于 Z-Order 最顶层（HWND_TOPMOST + SWP_NOACTIVATE 不抢夺焦点）
             Show();
             WindowState = WindowState.Normal;
 
-            // 如果未开启记忆滚动位置，则复位滚动条到最上面第一条
+            var hwnd = new WindowInteropHelper(this).Handle;
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+            // ④ 未开启记忆滚动时，复位到第一条
             if (!_settingsManager.Settings.PasteRememberScrollPosition && _clipboardManager.Items.Count > 0)
-            {
                 ClipboardList.ScrollIntoView(_clipboardManager.Items.FirstOrDefault());
+
+            // ⑤ 启动外部鼠标点击监听（未固定时才监听，固定时不自动隐藏）
+            RefreshMouseMonitor();
+        }
+
+        // ══════════════════════════════════════════════
+        // 全局鼠标监听控制
+        // ══════════════════════════════════════════════
+        private void RefreshMouseMonitor()
+        {
+            if (!IsVisible)
+            {
+                _mouseMonitor.Stop();
+                return;
+            }
+
+            if (_isPinned)
+            {
+                // 固定模式：不自动隐藏，停止监听
+                _mouseMonitor.Stop();
+            }
+            else
+            {
+                // 非固定模式：监听外部点击，立即隐藏
+                var selfHwnd = new WindowInteropHelper(this).Handle;
+                _mouseMonitor.Start(new[] { selfHwnd });
             }
         }
 
+        private void OnClickedOutsideWindow()
+        {
+            // 在 UI 线程隐藏（此回调来自鼠标钩子线程）
+            Dispatcher.Invoke(() =>
+            {
+                if (!_isPinned && IsVisible) Hide();
+            });
+        }
+
+        // ══════════════════════════════════════════════
+        // 窗口隐藏时停止监听
+        // ══════════════════════════════════════════════
+        protected override void OnClosed(EventArgs e)
+        {
+            _mouseMonitor.Dispose();
+            base.OnClosed(e);
+        }
+
+        // ══════════════════════════════════════════════
+        // 标题栏拖动
+        // ══════════════════════════════════════════════
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 1) DragMove();
         }
 
-        public void CloseBtn_Click(object sender, RoutedEventArgs e)
-        {
-            Hide();
-        }
+        // ══════════════════════════════════════════════
+        // 关闭按钮
+        // ══════════════════════════════════════════════
+        public void CloseBtn_Click(object sender, RoutedEventArgs e) => Hide();
 
+        // ══════════════════════════════════════════════
+        // Window_Deactivated（仅对进程内切换生效，原行为保留，固定时不隐藏）
+        // 注意：对进程外窗口失效，外部点击隐藏已由 GlobalMouseClickMonitor 接管
+        // ══════════════════════════════════════════════
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            if (!_isPinned)
-            {
-                Hide();
-            }
+            // 已由鼠标监听器接管，此处空置，避免与监听器冲突
         }
 
+        // ══════════════════════════════════════════════
+        // 列表项点击 — 保留原汁原味的单击/双击区分逻辑
+        // ══════════════════════════════════════════════
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (IsClickOnDeleteButton(e.OriginalSource as DependencyObject))
-            {
-                return;
-            }
+            // 若点击的是删除按钮，直接跳过
+            if (IsClickOnDeleteButton(e.OriginalSource as DependencyObject)) return;
 
             if (sender is ListBoxItem item && item.Content is ClipboardItem clipItem)
             {
                 if (e.ClickCount == 1)
                 {
+                    // 单击：启动 250ms 定时器，超时后执行单击逻辑（复制置顶）
                     _pendingClickItem = clipItem;
                     if (_clickTimer == null)
                     {
-                        _clickTimer = new System.Windows.Threading.DispatcherTimer();
+                        _clickTimer          = new System.Windows.Threading.DispatcherTimer();
                         _clickTimer.Interval = TimeSpan.FromMilliseconds(250);
-                        _clickTimer.Tick += ClickTimer_Tick;
+                        _clickTimer.Tick    += ClickTimer_Tick;
                     }
                     _clickTimer.Start();
                 }
                 else if (e.ClickCount >= 2)
                 {
-                    if (_clickTimer != null)
-                    {
-                        _clickTimer.Stop();
-                    }
+                    // 双击：立即取消单击定时器，执行双击逻辑（填充粘贴）
+                    _clickTimer?.Stop();
                     _pendingClickItem = null;
                     UseSelectedItem(clipItem);
                     e.Handled = true;
@@ -240,12 +324,15 @@ namespace WinKit.Clipboard
             _clickTimer?.Stop();
             if (_pendingClickItem != null)
             {
-                var item = _pendingClickItem;
+                var item      = _pendingClickItem;
                 _pendingClickItem = null;
                 ClickItem(item);
             }
         }
 
+        /// <summary>
+        /// 单击逻辑：复制文本到系统剪贴板，将条目移至首位，未固定时自动隐藏
+        /// </summary>
         private void ClickItem(ClipboardItem item)
         {
             if (item == null || string.IsNullOrEmpty(item.Content)) return;
@@ -254,31 +341,77 @@ namespace WinKit.Clipboard
                 System.Windows.Clipboard.SetText(item.Content);
                 _copiedItemId = item.Id;
                 _clipboardManager.MoveToTop(item);
-                
-                // 强行立即更新布局，确保置顶布局在隐藏窗口前已计算完成
                 ClipboardList.UpdateLayout();
-                
-                Hide();
+
+                if (!_isPinned)
+                {
+                    Hide();
+                }
+                else
+                {
+                    // 固定模式：显示 Toast 提示
+                    ShowToast("已复制到剪贴板");
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"单击复制与置顶失败: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"单击复制失败: {ex.Message}");
             }
         }
 
-        private bool IsClickOnDeleteButton(DependencyObject? obj)
+        /// <summary>
+        /// 双击逻辑：将文本注入目标窗口（自动填充）
+        /// 未固定时隐藏窗口；固定时保持显示在最上面，支持连续粘贴
+        /// </summary>
+        private async void UseSelectedItem(ClipboardItem item)
         {
-            while (obj != null)
+            if (item == null || string.IsNullOrEmpty(item.Content)) return;
+            try
             {
-                if (obj is System.Windows.Controls.Button btn && btn.Name == "DeleteBtn")
+                // ① 安全设置剪贴板（带最多 3 次重试，防止 COM 冲突）
+                bool setOk = false;
+                for (int i = 0; i < 3 && !setOk; i++)
                 {
-                    return true;
+                    try
+                    {
+                        System.Windows.Clipboard.SetText(item.Content);
+                        setOk = true;
+                    }
+                    catch
+                    {
+                        await Task.Delay(30);
+                    }
                 }
-                obj = System.Windows.Media.VisualTreeHelper.GetParent(obj);
+                if (!setOk) return;
+
+                _copiedItemId = null;
+
+                // ② 若未固定，先隐藏窗口（防止 Ctrl+V 被发送到剪贴板窗口本身）
+                if (!_isPinned)
+                {
+                    Hide();
+                    await Task.Delay(60);
+                }
+
+                // ③ 将前台焦点精准归还给呼出剪贴板前的工作窗口
+                if (_lastTargetHwnd != IntPtr.Zero && IsWindow(_lastTargetHwnd))
+                {
+                    SetForegroundWindow(_lastTargetHwnd);
+                    await Task.Delay(80);
+                }
+
+                // ④ 模拟 Ctrl+V 粘贴
+                SimulateCtrlV();
             }
-            return false;
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"双击粘贴失败: {ex.Message}");
+            }
         }
 
+        // ══════════════════════════════════════════════
+        // 键盘 Enter 键确认
+        // ══════════════════════════════════════════════
         private void ClipboardList_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
@@ -286,13 +419,9 @@ namespace WinKit.Clipboard
                 if (ClipboardList.SelectedItem is ClipboardItem item)
                 {
                     if (_copiedItemId == item.Id)
-                    {
                         UseSelectedItem(item);
-                    }
                     else
-                    {
                         CopyItemToClipboard(item);
-                    }
                     e.Handled = true;
                 }
             }
@@ -313,35 +442,21 @@ namespace WinKit.Clipboard
             }
         }
 
-        private async void UseSelectedItem(ClipboardItem item)
-        {
-            if (item == null || string.IsNullOrEmpty(item.Content)) return;
-            try
-            {
-                System.Windows.Clipboard.SetText(item.Content);
-                _copiedItemId = null;
-                Hide();
-                await Task.Delay(80);
-                SimulateCtrlV();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"回填粘贴失败: {ex.Message}");
-            }
-        }
-
+        // ══════════════════════════════════════════════
+        // Toast 提示
+        // ══════════════════════════════════════════════
         private async void ShowToast(string message)
         {
             CountText.Text = message;
             _toastActiveCount++;
             await Task.Delay(1200);
             _toastActiveCount--;
-            if (_toastActiveCount == 0)
-            {
-                UpdateUIStates();
-            }
+            if (_toastActiveCount == 0) UpdateUIStates();
         }
 
+        // ══════════════════════════════════════════════
+        // 删除按钮
+        // ══════════════════════════════════════════════
         private void DeleteButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.Button btn && btn.Tag is Guid id)
@@ -351,30 +466,51 @@ namespace WinKit.Clipboard
             }
         }
 
+        // ══════════════════════════════════════════════
+        // 清空全部
+        // ══════════════════════════════════════════════
         private void ClearAllButton_Click(object sender, RoutedEventArgs e)
         {
-            if (System.Windows.MessageBox.Show("确定清空全部剪贴板历史吗？此操作不可撤销。", "提示", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
-            {
+            if (System.Windows.MessageBox.Show("确定清空全部剪贴板历史吗？此操作不可撤销。", "提示",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                 _clipboardManager.ClearAll();
-            }
         }
 
+        // ══════════════════════════════════════════════
+        // 辅助：判断点击是否在删除按钮上
+        // ══════════════════════════════════════════════
+        private bool IsClickOnDeleteButton(DependencyObject? obj)
+        {
+            while (obj != null)
+            {
+                if (obj is System.Windows.Controls.Button btn && btn.Name == "DeleteBtn") return true;
+                obj = System.Windows.Media.VisualTreeHelper.GetParent(obj);
+            }
+            return false;
+        }
+
+        // ══════════════════════════════════════════════
+        // Ctrl+V 模拟粘贴
+        // ══════════════════════════════════════════════
         private static void SimulateCtrlV()
         {
             keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_V, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_V,       0, 0, UIntPtr.Zero);
+            keybd_event(VK_V,       0, KEYEVENTF_KEYUP, UIntPtr.Zero);
             keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
 
+        // ══════════════════════════════════════════════
+        // 右下角 ResizeGrip
+        // ══════════════════════════════════════════════
         private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            _isResizing = true;
-            _resizeStart = e.GetPosition(null);
-            _resizeStartW = Width;
-            _resizeStartH = Height;
+            _isResizing    = true;
+            _resizeStart   = e.GetPosition(null);
+            _resizeStartW  = Width;
+            _resizeStartH  = Height;
             ((UIElement)sender).CaptureMouse();
-            ((UIElement)sender).MouseMove += ResizeGrip_MouseMove;
+            ((UIElement)sender).MouseMove        += ResizeGrip_MouseMove;
             ((UIElement)sender).MouseLeftButtonUp += ResizeGrip_MouseLeftButtonUp;
             e.Handled = true;
         }
@@ -382,21 +518,17 @@ namespace WinKit.Clipboard
         private void ResizeGrip_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
             if (!_isResizing) return;
-            var pos = e.GetPosition(null);
-            var delta = pos - _resizeStart;
-
-            double newW = Math.Max(MinWidth, _resizeStartW + delta.X);
-            double newH = Math.Max(MinHeight, _resizeStartH + delta.Y);
-
-            Width = newW;
-            Height = newH;
+            var    pos   = e.GetPosition(null);
+            var    delta = pos - _resizeStart;
+            Width  = Math.Max(MinWidth,  _resizeStartW + delta.X);
+            Height = Math.Max(MinHeight, _resizeStartH + delta.Y);
         }
 
         private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             _isResizing = false;
             ((UIElement)sender).ReleaseMouseCapture();
-            ((UIElement)sender).MouseMove -= ResizeGrip_MouseMove;
+            ((UIElement)sender).MouseMove        -= ResizeGrip_MouseMove;
             ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
         }
     }
