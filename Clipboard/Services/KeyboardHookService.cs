@@ -23,7 +23,8 @@ namespace WinKit.Clipboard.Services
         }
 
         /// <summary>
-        /// 将 "Win+Shift+T" / "Ctrl+Alt+V" 等字符串解析为描述符
+        /// 将 "Win+Shift+T" / "Ctrl+Alt+V" / "Win+Alt+F1" 等字符串解析为描述符
+        /// 支持：修饰键 (Win/Ctrl/Alt/Shift) + 字母 (A-Z) + 数字 (0-9) + 功能键 (F1-F12)
         /// </summary>
         public static HotkeyDescriptor? Parse(string raw)
         {
@@ -33,34 +34,33 @@ namespace WinKit.Clipboard.Services
             int vk = 0;
             foreach (var p in parts)
             {
-                switch (p.Trim().ToUpperInvariant())
+                var upper = p.Trim().ToUpperInvariant();
+                switch (upper)
                 {
                     case "WIN":   win   = true; break;
                     case "CTRL":  ctrl  = true; break;
                     case "ALT":   alt   = true; break;
                     case "SHIFT": shift = true; break;
                     default:
-                        // 单字符映射到 VK
-                        if (p.Length == 1) vk = (int)char.ToUpperInvariant(p[0]);
-                        else vk = VkFromName(p.Trim());
+                        if (upper.Length == 1)
+                        {
+                            char c = upper[0];
+                            if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+                            {
+                                vk = (int)c; // VK: 'A'=0x41 .. 'Z'=0x5A, '0'=0x30 .. '9'=0x39
+                            }
+                        }
+                        else if (upper.Length >= 2 && upper[0] == 'F' && int.TryParse(upper.Substring(1), out int fNum)
+                                 && fNum >= 1 && fNum <= 12)
+                        {
+                            vk = 0x70 + (fNum - 1); // VK_F1=0x70 .. VK_F12=0x7B
+                        }
                         break;
                 }
             }
             if (vk == 0) return null;
             return new HotkeyDescriptor(vk, win, ctrl, alt, shift);
         }
-
-        private static int VkFromName(string name) => name.ToUpperInvariant() switch
-        {
-            "F1"  => 0x70, "F2"  => 0x71, "F3"  => 0x72, "F4"  => 0x73,
-            "F5"  => 0x74, "F6"  => 0x75, "F7"  => 0x76, "F8"  => 0x77,
-            "F9"  => 0x78, "F10" => 0x79, "F11" => 0x7A, "F12" => 0x7B,
-            "D"   => (int)'D',
-            "S"   => (int)'S',
-            "T"   => (int)'T',
-            "V"   => (int)'V',
-            _     => 0
-        };
 
         /// <summary>判断当前按键事件是否与本描述符匹配</summary>
         public bool Matches(int pressedVk, bool lwinDown, bool rwinDown, bool ctrlDown, bool altDown, bool shiftDown)
@@ -85,13 +85,24 @@ namespace WinKit.Clipboard.Services
         private const int WM_KEYDOWN     = 0x0100;
         private const int WM_SYSKEYDOWN  = 0x0104;
 
-        private const int VK_LWIN  = 0x5B;
-        private const int VK_RWIN  = 0x5C;
-        private const int VK_CTRL  = 0x11;
-        private const int VK_ALT   = 0x12;
-        private const int VK_SHIFT = 0x10;
+        public const int VK_LWIN  = 0x5B;
+        public const int VK_RWIN  = 0x5C;
+        public const int VK_CTRL  = 0x11;
+        public const int VK_ALT   = 0x12;
+        public const int VK_SHIFT = 0x10;
 
         private const uint KEYEVENTF_KEYUP = 0x0002;
+        private const int LLKHF_INJECTED   = 0x0010;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KBDLLHOOKSTRUCT
+        {
+            public int vkCode;
+            public int scanCode;
+            public int flags;
+            public int time;
+            public UIntPtr dwExtraInfo;
+        }
 
         // ── P/Invoke ───────────────────────────────────────────────────
         private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -113,7 +124,7 @@ namespace WinKit.Clipboard.Services
         private static extern short GetAsyncKeyState(int vKey);
 
         [DllImport("user32.dll")]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+        public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         // ── 已注册的热键表 ─────────────────────────────────────────────
         private readonly List<(HotkeyDescriptor Desc, Action Callback)> _hotkeys = new();
@@ -164,6 +175,73 @@ namespace WinKit.Clipboard.Services
                                  && h.Desc.Shift == desc.Shift);
         }
 
+        /// <summary>
+        /// 模拟按下指定的快捷键组合（例如模拟发送 Win+Shift+S 或 Win+Shift+T）
+        /// </summary>
+        public static void SimulateKeyCombination(bool win, bool shift, bool ctrl, bool alt, byte vk)
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                // 1. 强制释放当前可能处于按下状态的物理修饰键，避免系统组合键状态混淆
+                keybd_event((byte)VK_LWIN,  0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                keybd_event((byte)VK_RWIN,  0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                keybd_event((byte)VK_CTRL,  0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                keybd_event((byte)VK_ALT,   0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                keybd_event((byte)VK_SHIFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+                System.Threading.Thread.Sleep(50); // 确保系统底层按键状态同步
+
+                // 2. 依次模拟按下目标修饰键
+                if (win)
+                {
+                    keybd_event((byte)VK_LWIN, 0, 0, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(10);
+                }
+                if (ctrl)
+                {
+                    keybd_event((byte)VK_CTRL, 0, 0, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(10);
+                }
+                if (alt)
+                {
+                    keybd_event((byte)VK_ALT, 0, 0, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(10);
+                }
+                if (shift)
+                {
+                    keybd_event((byte)VK_SHIFT, 0, 0, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(10);
+                }
+
+                // 3. 模拟按下并释放目标主键
+                keybd_event(vk, 0, 0, UIntPtr.Zero);
+                System.Threading.Thread.Sleep(30);
+                keybd_event(vk, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                System.Threading.Thread.Sleep(10);
+
+                // 4. 依次释放目标修饰键
+                if (shift)
+                {
+                    keybd_event((byte)VK_SHIFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(10);
+                }
+                if (alt)
+                {
+                    keybd_event((byte)VK_ALT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(10);
+                }
+                if (ctrl)
+                {
+                    keybd_event((byte)VK_CTRL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(10);
+                }
+                if (win)
+                {
+                    keybd_event((byte)VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                }
+            });
+        }
+
         // ── 钩子核心 ──────────────────────────────────────────────────
         private IntPtr SetHook(LowLevelKeyboardProc proc)
         {
@@ -178,7 +256,15 @@ namespace WinKit.Clipboard.Services
         {
             if (nCode >= 0)
             {
-                int vkCode  = Marshal.ReadInt32(lParam);
+                var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                
+                // 软件注入的按键直接放行，避免模拟按键时死循环或被自身拦截
+                if ((hookStruct.flags & LLKHF_INJECTED) != 0)
+                {
+                    return CallNextHookEx(_hookID, nCode, wParam, lParam);
+                }
+
+                int vkCode  = hookStruct.vkCode;
                 int message = wParam.ToInt32();
 
                 bool isKeyDown = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;

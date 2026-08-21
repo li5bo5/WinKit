@@ -29,10 +29,8 @@ namespace WinKit.Common
 
             _boxMap = new Dictionary<string, WpfTextBox>
             {
-                { "HotkeyTodoTempShow",       HkTodoTemp   },
+                { "HotkeyTodoTopToggle",       HkTodoTop    },
                 { "HotkeyClipboardToggle",     HkClipboard  },
-                { "HotkeyScreenshotOcr",       HkOcr        },
-                { "HotkeyScreenshotSnip",      HkSnip       },
                 { "HotkeyTodoSaveAndExit",     HkSaveExit   },
             };
 
@@ -45,12 +43,9 @@ namespace WinKit.Common
         private void LoadFromSettings()
         {
             var s = _settingsManager.Settings;
-            HkTodoTemp.Text  = s.HotkeyTodoTempShow;
+            HkTodoTop.Text   = s.HotkeyTodoTopToggle;
             HkClipboard.Text = s.HotkeyClipboardToggle;
-            HkOcr.Text       = s.HotkeyScreenshotOcr;
-            HkSnip.Text      = s.HotkeyScreenshotSnip;
             HkSaveExit.Text  = s.HotkeyTodoSaveAndExit;
-            EscEnabled.IsChecked = s.HotkeyEscExitEnabled;
         }
 
         // ══════════════════════════════════════════════
@@ -179,12 +174,9 @@ namespace WinKit.Common
         private void SaveBtn_Click(object sender, RoutedEventArgs e)
         {
             var settings = _settingsManager.Settings;
-            settings.HotkeyTodoTempShow      = HkTodoTemp.Text.Trim();
+            settings.HotkeyTodoTopToggle     = HkTodoTop.Text.Trim();
             settings.HotkeyClipboardToggle   = HkClipboard.Text.Trim();
-            settings.HotkeyScreenshotOcr     = HkOcr.Text.Trim();
-            settings.HotkeyScreenshotSnip    = HkSnip.Text.Trim();
             settings.HotkeyTodoSaveAndExit   = HkSaveExit.Text.Trim();
-            settings.HotkeyEscExitEnabled    = EscEnabled.IsChecked == true;
             _settingsManager.SaveSettings(settings);
 
             HotkeysChanged?.Invoke();
@@ -200,24 +192,13 @@ namespace WinKit.Common
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
             var settings = _settingsManager.Settings;
-            settings.HotkeyTodoTempShow    = "Win+Alt+D";
+            settings.HotkeyTodoTopToggle   = "Ctrl+D";
             settings.HotkeyClipboardToggle = "Win+V";
-            settings.HotkeyScreenshotOcr   = "Win+Shift+T";
-            settings.HotkeyScreenshotSnip  = "Win+Shift+S";
-            settings.HotkeyTodoSaveAndExit = "Win+S";
-            settings.HotkeyEscExitEnabled  = true;
+            settings.HotkeyTodoSaveAndExit = "Ctrl+S";
             _settingsManager.SaveSettings(settings);
 
             LoadFromSettings();
             HotkeysChanged?.Invoke();
-        }
-
-        // ══════════════════════════════════════════════
-        // Esc 开关
-        // ══════════════════════════════════════════════
-        private void EscEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            // 实时预览（保存后才真正生效）
         }
 
         // ══════════════════════════════════════════════
