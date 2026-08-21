@@ -48,10 +48,6 @@ namespace WinKit.Todo
         private bool _isPassThrough = false;
         private System.Windows.Threading.DispatcherTimer? _passThroughTimer;
 
-        // 10 秒临时显示倒计时
-        private System.Windows.Threading.DispatcherTimer? _tempShowTimer;
-        private bool _isTempShow = false; // 当前是否处于临时显示模式
-
         // 托盘引用（用于同步状态）
         private TrayHelper? _tray;
         public bool IsPinned      => _isPinned;
@@ -137,39 +133,6 @@ namespace WinKit.Todo
                 UpdateEmptyPlaceholder(); 
                 SetTitleButtonsOpacity((_isPinned || _isPassThrough) ? 1 : 0); 
             };
-
-            // 10 秒临时显示定时器
-            _tempShowTimer = new System.Windows.Threading.DispatcherTimer();
-            _tempShowTimer.Interval = TimeSpan.FromSeconds(10);
-            _tempShowTimer.Tick += (s, e) =>
-            {
-                _tempShowTimer.Stop();
-                if (_isTempShow) { _isTempShow = false; Hide(); }
-            };
-
-            // 鼠标移动 / 键盘操作刷新临时显示倒计时
-            PreviewMouseMove += (s, e) => RefreshTempShowTimer();
-            PreviewKeyDown   += (s, e) => RefreshTempShowTimer();
-            
-            // 全局快捷键/双击逻辑
-            PreviewMouseLeftButtonDown += (s, e) => {
-                if (e.ClickCount == 2) {
-                    var focusedElement = FocusManager.GetFocusedElement(this);
-                    if (focusedElement is System.Windows.Controls.TextBox) {
-                        Keyboard.ClearFocus();
-                        FocusManager.SetFocusedElement(this, this);
-                    }
-                }
-            };
-        }
-
-        private void RefreshTempShowTimer()
-        {
-            if (_isTempShow)
-            {
-                _tempShowTimer?.Stop();
-                _tempShowTimer?.Start();
-            }
         }
 
         // ══════════════════════════════════════════════
@@ -322,7 +285,7 @@ namespace WinKit.Todo
             if (_isPassThrough)
             {
                 PassThroughBtn.Content = "◉";
-                PassThroughBtn.ToolTip = "关闭鼠标穿透";
+                PassThroughBtn.ToolTip = "取消穿透";
                 SetTitleButtonsOpacity(1);
                 ResizeGripArea.Opacity = 0;
                 
@@ -331,7 +294,7 @@ namespace WinKit.Todo
             else
             {
                 PassThroughBtn.Content = "⊙";
-                PassThroughBtn.ToolTip = "开启鼠标穿透";
+                PassThroughBtn.ToolTip = "穿透";
                 if (!_isPinned) SetTitleButtonsOpacity(0);
                 
                 StopPassThroughTimer();
@@ -452,29 +415,15 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // 双击空白处：显示内联输入框
+        // 窗口全局鼠标按下：处于输入状态时，任意位置双击（ClickCount>=2）均自动保存并退出
         // ══════════════════════════════════════════════
-        private void Window_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // 若内联输入框当前显示中
-            if (InlineInputArea.Visibility == Visibility.Visible)
+            // 若内联输入框当前显示中——无论在窗口何处双击，一律保存并退出
+            if (InlineInputArea.Visibility == Visibility.Visible && e.ClickCount >= 2)
             {
-                // 判断双击是否在输入框内部
-                var src = e.OriginalSource as DependencyObject;
-                bool isInsideEditBox = false;
-                while (src != null)
-                {
-                    if (src == InlineEditBox) { isInsideEditBox = true; break; }
-                    src = System.Windows.Media.VisualTreeHelper.GetParent(src);
-                }
-
-                if (!isInsideEditBox)
-                {
-                    // 输入框外双击：退出输入状态（放弃未提交的临时输入）
-                    HideInlineInput();
-                    e.Handled = true;
-                    return;
-                }
+                CommitInlineInput();
+                e.Handled = true;
             }
         }
 
@@ -589,7 +538,11 @@ namespace WinKit.Todo
 
         private void InlineEditBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            HideInlineInput();
+            // 若仍处于显示状态，失焦时自动保存提交，避免点击外部意外丢失输入内容
+            if (InlineInputArea.Visibility == Visibility.Visible)
+            {
+                CommitInlineInput();
+            }
         }
 
         private void CommitInlineInput()
@@ -763,13 +716,13 @@ namespace WinKit.Todo
             if (_isPassThrough)
             {
                 PassThroughBtn.Content = "◉";
-                PassThroughBtn.ToolTip = "关闭鼠标穿透";
+                PassThroughBtn.ToolTip = "取消穿透";
                 StartPassThroughTimer();
             }
             else
             {
                 PassThroughBtn.Content = "⊙";
-                PassThroughBtn.ToolTip = "开启鼠标穿透";
+                PassThroughBtn.ToolTip = "穿透";
                 StopPassThroughTimer();
             }
         }
@@ -783,24 +736,54 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // 临时显示：快捷键唤出，10 秒无操作自动隐藏
+        // 置顶显示快捷键：
+        // 按下快捷键 -> 检查是否处于置顶状态
+        // - 置顶状态 -> 取消置顶
+        // - 取消置顶状态 -> 置顶 + 取消穿透
         // ══════════════════════════════════════════════
-        public void ShowTemporary()
+        public void ToggleTopmostAndPassThrough()
         {
             if (!IsVisible)
             {
                 Show();
-                Activate();
+            }
+
+            if (_isPinned)
+            {
+                // 当前处于置顶状态 -> 取消置顶
+                _isPinned = false;
+                this.Topmost = false;
+                PinBtn.Content = "📌";
+                PinBtn.ToolTip = "置顶";
+                if (!_isPassThrough) SetTitleButtonsOpacity(0);
             }
             else
             {
-                Activate();
+                // 当前处于非置顶状态 -> 置顶 + 取消穿透
+                _isPinned = true;
+                this.Topmost = true;
+                PinBtn.Content = "📍";
+                PinBtn.ToolTip = "取消置顶";
+                SetTitleButtonsOpacity(1);
+
+                // 取消穿透（若处于穿透状态）
+                if (_isPassThrough)
+                {
+                    _isPassThrough = false;
+                    PassThroughBtn.Content = "⊙";
+                    PassThroughBtn.ToolTip = "穿透";
+                    StopPassThroughTimer();
+
+                    var hwnd = new WindowInteropHelper(this).Handle;
+                    int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
+                }
             }
 
-            // 标记为临时显示模式，并重置倒计时
-            _isTempShow = true;
-            _tempShowTimer?.Stop();
-            _tempShowTimer?.Start();
+            Activate();
+            _tray?.SyncPinMenuItem();
+            _tray?.SyncPassThroughMenuItem();
+            SaveSettings();
         }
     }
 }

@@ -134,7 +134,7 @@ namespace WinKit.Common
             _todoPin = new MenuItem { Header = "置顶" };
             _todoPin.Click += (s, e) => ToggleTodoPin();
 
-            _todoPassThrough = new MenuItem { Header = "鼠标穿透" };
+            _todoPassThrough = new MenuItem { Header = "穿透" };
             _todoPassThrough.Click += (s, e) => ToggleTodoPassThrough();
 
             _itemHistory = new MenuItem { Header = "历史记录" };
@@ -254,7 +254,7 @@ namespace WinKit.Common
             int targetHeight = smallHeight <= 16 ? 32 : (smallHeight <= 24 ? 32 : 48);
             var trayIcon = iconStream != null ? new Icon(iconStream, new System.Drawing.Size(targetWidth, targetHeight)) : SystemIcons.Application;
             var vObj = asm.GetName().Version;
-            var version = vObj != null ? (vObj.Build > 0 ? vObj.ToString(3) : $"{vObj.Major}.{vObj.Minor}") : "2.1";
+            var version = vObj != null ? (vObj.Build > 0 ? vObj.ToString(3) : $"{vObj.Major}.{vObj.Minor}") : "2.2";
 
             _icon = new SWF.NotifyIcon
             {
@@ -365,7 +365,7 @@ namespace WinKit.Common
 
         public void SyncPassThroughMenuItem()
         {
-            _todoPassThrough.Header = ((Todo.MainWindow)_todoWindow).IsPassThrough ? "关闭鼠标穿透" : "鼠标穿透";
+            _todoPassThrough.Header = ((Todo.MainWindow)_todoWindow).IsPassThrough ? "取消穿透" : "穿透";
         }
 
         // ── 不透明度操作 ────────────────────────────────────────

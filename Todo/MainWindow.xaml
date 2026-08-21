@@ -10,7 +10,7 @@
         Topmost="False"
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
-        PreviewMouseDoubleClick="Window_PreviewMouseDoubleClick"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
         ResizeMode="NoResize">
 
     <!-- 主容器：圆角边框 + 60% 不透明白色背景 -->
@@ -57,7 +57,7 @@
                              Content="⊙"
                              Style="{StaticResource TitleBarBtn}"
                              Click="PassThroughBtn_Click"
-                             ToolTip="开启鼠标穿透"/>
+                             ToolTip="穿透"/>
 
                     <Button x:Name="CloseBtn"
                              Content="✕"

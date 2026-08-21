@@ -25,20 +25,14 @@ namespace WinKit.Common
         // 格式："Modifiers+Key"，例如 "Win+V"、"Alt+V"、"Ctrl+Shift+V"
         // Modifiers 可组合：Win、Ctrl、Alt、Shift（用 + 分隔）
 
-        /// <summary>临时显示 TodoList（10 秒无操作自动消失）</summary>
-        public string HotkeyTodoTempShow { get; set; } = "Win+Alt+D";
+        /// <summary>置顶显示快捷键（置顶时取消置顶，未置顶时置顶并取消穿透）</summary>
+        public string HotkeyTodoTopToggle { get; set; } = "Ctrl+D";
 
         /// <summary>唤出 / 隐藏剪贴板窗口（原 Win+V）</summary>
         public string HotkeyClipboardToggle { get; set; } = "Win+V";
 
-        /// <summary>映射截图 OCR 快捷键</summary>
-        public string HotkeyScreenshotOcr { get; set; } = "Win+Shift+T";
-
-        /// <summary>映射系统截图工具快捷键</summary>
-        public string HotkeyScreenshotSnip { get; set; } = "Win+Shift+S";
-
         /// <summary>在 Todo 编辑状态下保存并退出</summary>
-        public string HotkeyTodoSaveAndExit { get; set; } = "Win+S";
+        public string HotkeyTodoSaveAndExit { get; set; } = "Ctrl+S";
 
         /// <summary>Esc 键退出各浮窗与编辑状态（总开关）</summary>
         public bool HotkeyEscExitEnabled { get; set; } = true;

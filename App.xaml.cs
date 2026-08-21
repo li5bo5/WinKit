@@ -106,30 +106,13 @@ namespace WinKit
                 });
             });
 
-            // ── 2. 临时显示 TodoList（10 秒无操作自动消失） ───
-            _keyboardHookService.RegisterHotkey(settings.HotkeyTodoTempShow, () =>
+            // ── 2. 置顶显示快捷键（置顶时取消置顶，未置顶时置顶并取消穿透）───
+            _keyboardHookService.RegisterHotkey(settings.HotkeyTodoTopToggle, () =>
             {
-                Dispatcher.Invoke(() => _todoWindow?.ShowTemporary());
+                Dispatcher.Invoke(() => _todoWindow?.ToggleTopmostAndPassThrough());
             });
 
-            // ── 3. 截图 OCR（映射：透传给系统或第三方工具） ──
-            // 注意：Win+Shift+T 默认由 PowerToys 等工具接管，
-            // 此处钩子拦截后重新触发，让用户可以自定义组合键映射到该功能
-            _keyboardHookService.RegisterHotkey(settings.HotkeyScreenshotOcr, () =>
-            {
-                // 拦截自定义键后，模拟发送原始 Win+Shift+T（若自定义键与默认不同，则起到映射效果）
-                // 当自定义键与默认相同时，此注册本身已拦截并原样透传给系统前台
-                // 如需具体 OCR 调用，可在此处替换为应用 COM/URI 启动逻辑
-                System.Diagnostics.Debug.WriteLine("截图 OCR 快捷键触发");
-            });
-
-            // ── 4. 系统截图工具 ────────────────────────────────
-            _keyboardHookService.RegisterHotkey(settings.HotkeyScreenshotSnip, () =>
-            {
-                System.Diagnostics.Debug.WriteLine("截图工具快捷键触发");
-            });
-
-            // ── 5. Win+S 保存并退出 Todo 编辑（由 Todo 窗口内部 PreviewKeyDown 已处理）────
+            // ── 3. Win+S 保存并退出 Todo 编辑（由 Todo 窗口内部 PreviewKeyDown 已处理）────
             // KeyboardHookService 层无需额外注册，避免与 InlineEditBox 内部 Win+S 冲突
         }
 

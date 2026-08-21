@@ -9,7 +9,8 @@
         Background="Transparent"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
 
     <!-- 与主窗口一致：圆角 + 半透明白色背景 -->
     <Border Background="#D9FFFFFF"
@@ -27,7 +28,7 @@
                            FontWeight="SemiBold"
                            Foreground="#555"
                            VerticalAlignment="Center"/>
-                <TextBlock Text="Enter 确认 · Esc 取消"
+                <TextBlock Text="双击/Enter 确认 · Esc 取消"
                            FontSize="10"
                            Foreground="#999"
                            HorizontalAlignment="Right"
@@ -35,12 +36,12 @@
             </Grid>
 
             <!-- 输入框：使用与主窗口一致的样式 -->
-            <TextBox x:Name="InputBox"
+             <TextBox x:Name="InputBox"
                      Style="{StaticResource InlineTextBox}"
                      Margin="0,0,0,12"
                      PreviewKeyDown="InputBox_PreviewKeyDown"
                      TextChanged="InputBox_TextChanged"
-                     ToolTip="Enter 确认 / Esc 取消"/>
+                     ToolTip="双击/Enter 确认 / Ctrl+S 保存 / Esc 取消"/>
         </StackPanel>
     </Border>
 </Window>
