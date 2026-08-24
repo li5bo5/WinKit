@@ -12,11 +12,8 @@
         ShowInTaskbar="False"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
 
-    <!-- 与主窗口一致：圆角 + 半透明白色背景 -->
-    <Border Background="#D9FFFFFF"
-            CornerRadius="10"
-            BorderBrush="#22000000"
-            BorderThickness="1">
+    <!-- 与主窗口一致：圆角 + 统一半透明磨砂白色背景 -->
+    <Border Style="{StaticResource FluentWindowBorder}">
         <StackPanel Margin="14,12">
 
             <!-- 标题行：可拖动 -->

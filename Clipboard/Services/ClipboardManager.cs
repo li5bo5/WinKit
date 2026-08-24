@@ -1,79 +1,75 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
-using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
-using WinKit.Common;
 using WinKit.Clipboard.Models;
+using WinKit.Common;
 
 namespace WinKit.Clipboard.Services
 {
     /// <summary>
-    /// 剪切板数据管理器 - 使用 SQLite 数据库存储并使用 Deflate 压缩文本
+    /// 剪贴板历史数据管理服务，基于 JSON Lines 明文存储，支持上限折半清理
     /// </summary>
     public class ClipboardManager : IDisposable
     {
-        private readonly string _dbPath;
-        private readonly ObservableCollection<ClipboardItem> _items;
+        private readonly JsonLinesStorage<ClipboardItem> _storage;
         private readonly SettingsManager _settingsManager;
-        private bool _isFullyLoaded = false;
-        private int _insertsSinceCleanup = 0;
+        private readonly ObservableCollection<ClipboardItem> _items = new();
 
-        private const int InitialLoadCount = 200;
-        private const int BatchLoadCount = 500;
-        private const int CleanupThrottle = 10; // 每 N 次插入执行一次清理
-
-        private static readonly SHA256 Sha256 = SHA256.Create();
-
-        public ReadOnlyObservableCollection<ClipboardItem> Items { get; }
-
-        public event NotifyCollectionChangedEventHandler? ItemsChanged;
+        public ObservableCollection<ClipboardItem> Items => _items;
+        public int TotalCount => _items.Count;
 
         public ClipboardManager(SettingsManager settingsManager)
         {
             _settingsManager = settingsManager;
+            _storage = new JsonLinesStorage<ClipboardItem>(AppPaths.Clipboard);
 
-            AppPaths.EnsureDirectories();
-            _dbPath = AppPaths.Database;
-
-            _items = new ObservableCollection<ClipboardItem>();
-            _items.CollectionChanged += (s, e) => ItemsChanged?.Invoke(s, e);
-            Items = new ReadOnlyObservableCollection<ClipboardItem>(_items);
-
-            InitializeDatabase();
+            _settingsManager.SettingsChanged += OnSettingsChanged;
             LoadInitialData();
-
-            // 后台分批加载剩余历史数据，避免阻塞 UI
-            _ = LoadRemainingDataAsync();
         }
 
-        private void InitializeDatabase()
+        public ClipboardManager(SettingsManager settingsManager, string filePath)
         {
-            using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            connection.Open();
+            _settingsManager = settingsManager;
+            _storage = new JsonLinesStorage<ClipboardItem>(filePath);
 
-            var cmd = connection.CreateCommand();
-            cmd.CommandText = @"
-                CREATE TABLE IF NOT EXISTS _meta (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS clipboard_items (
-                    id TEXT PRIMARY KEY,
-                    content BLOB NOT NULL,
-                    timestamp TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_timestamp ON clipboard_items(timestamp DESC);
-            ";
-            cmd.ExecuteNonQuery();
+            _settingsManager.SettingsChanged += OnSettingsChanged;
+            LoadInitialData();
         }
 
+        private void OnSettingsChanged(object? sender, AppSettings newSettings)
+        {
+            int beforeCount = _items.Count;
+            EnforceMaxCapacity();
+            if (_items.Count != beforeCount)
+            {
+                _storage.Save(_items);
+            }
+        }
+
+        private void LoadInitialData()
+        {
+            try
+            {
+                var loaded = _storage.Load();
+                _items.Clear();
+                foreach (var item in loaded.OrderByDescending(i => i.Timestamp))
+                {
+                    _items.Add(item);
+                }
+
+                // 启动时若超过上限，执行一次折半清理
+                EnforceMaxCapacity();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ClipboardManager: 数据加载失败 - {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 添加文本条目（支持去重与容量超限折半清理）
+        /// </summary>
         public void AddTextItem(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
@@ -83,371 +79,107 @@ namespace WinKit.Clipboard.Services
 
             var settings = _settingsManager.Settings;
 
-            // 哈希去重逻辑
+            // 1. 去重逻辑
             if (settings.PasteEnableTextDeduplication)
             {
-                var hash = ComputeTextHash(text);
-                var existingItem = _items.FirstOrDefault(item => item.Type == ClipboardItemType.Text && item.ContentHash == hash);
-                
+                var existingItem = _items.FirstOrDefault(item => item.Type == ClipboardItemType.Text && item.Content == text);
                 if (existingItem != null)
                 {
-                    if (_items.Count > 0 && _items[0] == existingItem)
+                    existingItem.Timestamp = DateTime.Now;
+                    if (_items.IndexOf(existingItem) != 0)
                     {
-                        existingItem.Timestamp = DateTime.Now;
-                        UpdateItemTimestampInDb(existingItem.Id, existingItem.Timestamp);
-                        return;
+                        _items.Remove(existingItem);
+                        _items.Insert(0, existingItem);
                     }
-
-                    _items.Remove(existingItem);
-                    var newItem = new ClipboardItem
-                    {
-                        Type = ClipboardItemType.Text,
-                        Content = text,
-                        ContentHash = hash,
-                        Timestamp = DateTime.Now
-                    };
-                    ReplaceItemInDb(existingItem.Id, newItem);
-                    _items.Insert(0, newItem);
-                    
-                    if (++_insertsSinceCleanup >= CleanupThrottle)
-                    {
-                        CleanupOldData();
-                        _insertsSinceCleanup = 0;
-                    }
+                    _storage.Save(_items);
                     return;
                 }
             }
             else
             {
-                // 简单去重：检查是否与最新项相同
+                // 简单去重：如果与最新项完全相同则忽略
                 if (_items.Count > 0 && _items[0].Type == ClipboardItemType.Text && _items[0].Content == text)
                     return;
             }
 
-            var item = new ClipboardItem
+            // 2. 插入新项到顶部
+            var newItem = new ClipboardItem
             {
                 Type = ClipboardItemType.Text,
+                ContentType = "Text",
                 Content = text,
-                ContentHash = ComputeTextHash(text),
                 Timestamp = DateTime.Now
             };
 
-            InsertItemToDb(item);
-            _items.Insert(0, item);
+            _items.Insert(0, newItem);
 
-            if (++_insertsSinceCleanup >= CleanupThrottle)
+            // 3. 检查容量上限，超限时折半清理
+            EnforceMaxCapacity();
+
+            // 4. 持久化保存
+            _storage.Save(_items);
+        }
+
+        /// <summary>
+        /// 容量控制：超过上限 N 时，一次性截断清理至 N / 2 条
+        /// </summary>
+        private void EnforceMaxCapacity()
+        {
+            int maxItems = _settingsManager.Settings.PasteMaxItems;
+            if (maxItems < 100) maxItems = 100;
+            if (maxItems > 500) maxItems = 500;
+
+            if (_items.Count > maxItems)
             {
-                CleanupOldData();
-                _insertsSinceCleanup = 0;
+                int targetCount = Math.Max(50, maxItems / 2);
+                while (_items.Count > targetCount)
+                {
+                    _items.RemoveAt(_items.Count - 1);
+                }
             }
         }
 
-        private static string ComputeTextHash(string text)
+        /// <summary>
+        /// 将指定条目移动到列表顶部
+        /// </summary>
+        public void MoveToTop(ClipboardItem item)
         {
-            var bytes = Sha256.ComputeHash(Encoding.UTF8.GetBytes(text));
-            return Convert.ToBase64String(bytes);
+            if (item == null) return;
+            var index = _items.IndexOf(item);
+            if (index > 0)
+            {
+                _items.RemoveAt(index);
+                item.Timestamp = DateTime.Now;
+                _items.Insert(0, item);
+                _storage.Save(_items);
+            }
         }
 
-        private void InsertItemToDb(ClipboardItem item)
-        {
-            using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            connection.Open();
-
-            var compressed = CompressContent(item.Content ?? string.Empty);
-            var command = connection.CreateCommand();
-            command.CommandText = "INSERT INTO clipboard_items (id, content, timestamp) VALUES (@id, @content, @timestamp)";
-            command.Parameters.AddWithValue("@id", item.Id.ToString());
-            command.Parameters.AddWithValue("@content", compressed);
-            command.Parameters.AddWithValue("@timestamp", item.Timestamp.ToString("O"));
-            command.ExecuteNonQuery();
-        }
-
+        /// <summary>
+        /// 删除指定条目
+        /// </summary>
         public void RemoveItem(Guid id)
         {
             var item = _items.FirstOrDefault(i => i.Id == id);
             if (item != null)
             {
                 _items.Remove(item);
-                DeleteItemFromDb(id);
+                _storage.Save(_items);
             }
         }
 
-        private void DeleteItemFromDb(Guid id)
-        {
-            using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            connection.Open();
-
-            var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM clipboard_items WHERE id = @id";
-            command.Parameters.AddWithValue("@id", id.ToString());
-            command.ExecuteNonQuery();
-        }
-
-        private void ReplaceItemInDb(Guid oldId, ClipboardItem newItem)
-        {
-            using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            connection.Open();
-
-            using var transaction = connection.BeginTransaction();
-            try
-            {
-                var deleteCmd = connection.CreateCommand();
-                deleteCmd.CommandText = "DELETE FROM clipboard_items WHERE id = @id";
-                deleteCmd.Parameters.AddWithValue("@id", oldId.ToString());
-                deleteCmd.ExecuteNonQuery();
-
-                var compressed = CompressContent(newItem.Content ?? string.Empty);
-                var insertCmd = connection.CreateCommand();
-                insertCmd.CommandText = "INSERT INTO clipboard_items (id, content, timestamp) VALUES (@id, @content, @timestamp)";
-                insertCmd.Parameters.AddWithValue("@id", newItem.Id.ToString());
-                insertCmd.Parameters.AddWithValue("@content", compressed);
-                insertCmd.Parameters.AddWithValue("@timestamp", newItem.Timestamp.ToString("O"));
-                insertCmd.ExecuteNonQuery();
-
-                transaction.Commit();
-            }
-            catch
-            {
-                transaction.Rollback();
-                throw;
-            }
-        }
-
+        /// <summary>
+        /// 清空全部剪贴板历史
+        /// </summary>
         public void ClearAll()
         {
             _items.Clear();
-            ClearAllFromDb();
-        }
-
-        private void ClearAllFromDb()
-        {
-            using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            connection.Open();
-
-            var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM clipboard_items";
-            command.ExecuteNonQuery();
-        }
-
-        public void MoveToTop(ClipboardItem item)
-        {
-            if (item == null) return;
-
-            var existing = _items.FirstOrDefault(i => i.Id == item.Id);
-            if (existing != null)
-            {
-                _items.Remove(existing);
-                existing.Timestamp = DateTime.Now;
-                _items.Insert(0, existing);
-                UpdateItemTimestampInDb(existing.Id, existing.Timestamp);
-            }
-        }
-
-        private void UpdateItemTimestampInDb(Guid id, DateTime newTimestamp)
-        {
-            try
-            {
-                using var connection = new SqliteConnection($"Data Source={_dbPath}");
-                connection.Open();
-
-                var command = connection.CreateCommand();
-                command.CommandText = "UPDATE clipboard_items SET timestamp = @timestamp WHERE id = @id";
-                command.Parameters.AddWithValue("@id", id.ToString());
-                command.Parameters.AddWithValue("@timestamp", newTimestamp.ToString("O"));
-                command.ExecuteNonQuery();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"更新数据库时间戳失败: {ex.Message}");
-            }
-        }
-
-        public IEnumerable<ClipboardItem> Search(string query)
-        {
-            if (string.IsNullOrWhiteSpace(query))
-                return _items;
-
-            query = query.ToLowerInvariant();
-            return _items.Where(item => item.Type == ClipboardItemType.Text && item.Content?.ToLowerInvariant().Contains(query) == true);
-        }
-
-        public void CleanupOldData()
-        {
-            var settings = _settingsManager.Settings;
-            int maxItems = settings.PasteMaxItems;
-
-            var itemsToDelete = new List<ClipboardItem>();
-
-            // 限制条目数
-            while (_items.Count > maxItems)
-            {
-                var oldest = _items.LastOrDefault();
-                if (oldest != null)
-                {
-                    _items.Remove(oldest);
-                    itemsToDelete.Add(oldest);
-                }
-                else break;
-            }
-
-            if (itemsToDelete.Count > 0)
-            {
-                DeleteItemsBatchFromDb(itemsToDelete);
-            }
-        }
-
-        private void DeleteItemsBatchFromDb(List<ClipboardItem> items)
-        {
-            using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            connection.Open();
-
-            using var transaction = connection.BeginTransaction();
-            try
-            {
-                foreach (var item in items)
-                {
-                    var command = connection.CreateCommand();
-                    command.CommandText = "DELETE FROM clipboard_items WHERE id = @id";
-                    command.Parameters.AddWithValue("@id", item.Id.ToString());
-                    command.ExecuteNonQuery();
-                }
-                transaction.Commit();
-            }
-            catch
-            {
-                transaction.Rollback();
-                throw;
-            }
-        }
-
-        private void LoadInitialData()
-        {
-            try
-            {
-                using var connection = new SqliteConnection($"Data Source={_dbPath}");
-                connection.Open();
-
-                var command = connection.CreateCommand();
-                command.CommandText = $"SELECT id, content, timestamp FROM clipboard_items ORDER BY timestamp DESC LIMIT {InitialLoadCount}";
-
-                using var reader = command.ExecuteReader();
-                var loadedList = new List<ClipboardItem>();
-
-                while (reader.Read())
-                {
-                    var id = Guid.Parse(reader.GetString(0));
-                    var content = DecompressContent((byte[])reader["content"]);
-                    var timestamp = DateTime.Parse(reader.GetString(2));
-
-                    loadedList.Add(new ClipboardItem
-                    {
-                        Id = id,
-                        Type = ClipboardItemType.Text,
-                        Content = content,
-                        ContentHash = ComputeTextHash(content),
-                        Timestamp = timestamp
-                    });
-                }
-
-                _items.Clear();
-                foreach (var item in loadedList.OrderByDescending(i => i.Timestamp))
-                {
-                    _items.Add(item);
-                }
-
-                if (loadedList.Count < InitialLoadCount)
-                {
-                    _isFullyLoaded = true;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"ClipboardManager: 初始数据加载失败 - {ex.Message}");
-            }
-        }
-
-        private async Task LoadRemainingDataAsync()
-        {
-            if (_isFullyLoaded) return;
-
-            try
-            {
-                int offset = InitialLoadCount;
-                int totalLoaded = 0;
-
-                while (true)
-                {
-                    var batch = await Task.Run(() =>
-                    {
-                        var batchItems = new List<(Guid id, string content, DateTime timestamp)>();
-                        using var connection = new SqliteConnection($"Data Source={_dbPath}");
-                        connection.Open();
-
-                        var command = connection.CreateCommand();
-                        command.CommandText = $"SELECT id, content, timestamp FROM clipboard_items ORDER BY timestamp DESC LIMIT {BatchLoadCount} OFFSET {offset}";
-
-                        using var reader = command.ExecuteReader();
-                        while (reader.Read())
-                        {
-                            var id = Guid.Parse(reader.GetString(0));
-                            var content = DecompressContent((byte[])reader["content"]);
-                            var timestamp = DateTime.Parse(reader.GetString(2));
-                            batchItems.Add((id, content, timestamp));
-                        }
-                        return batchItems;
-                    });
-
-                    if (batch.Count == 0) break;
-
-                    foreach (var (id, content, timestamp) in batch)
-                    {
-                        _items.Add(new ClipboardItem
-                        {
-                            Id = id,
-                            Type = ClipboardItemType.Text,
-                            Content = content,
-                            ContentHash = ComputeTextHash(content),
-                            Timestamp = timestamp
-                        });
-                    }
-
-                    totalLoaded += batch.Count;
-                    offset += BatchLoadCount;
-
-                    if (batch.Count < BatchLoadCount) break;
-                }
-
-                _isFullyLoaded = true;
-                System.Diagnostics.Debug.WriteLine($"ClipboardManager: 历史记录后台读取完成，共加载 {totalLoaded} 项");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"ClipboardManager: 历史记录后台读取失败 - {ex.Message}");
-            }
-        }
-
-        private static byte[] CompressContent(string text)
-        {
-            var bytes = Encoding.UTF8.GetBytes(text);
-            using var outputStream = new MemoryStream();
-            using (var deflateStream = new DeflateStream(outputStream, CompressionLevel.Fastest))
-            {
-                deflateStream.Write(bytes, 0, bytes.Length);
-            }
-            return outputStream.ToArray();
-        }
-
-        private static string DecompressContent(byte[] compressed)
-        {
-            using var inputStream = new MemoryStream(compressed);
-            using var deflateStream = new DeflateStream(inputStream, CompressionMode.Decompress);
-            using var outputStream = new MemoryStream();
-            deflateStream.CopyTo(outputStream);
-            return Encoding.UTF8.GetString(outputStream.ToArray());
+            _storage.Save(_items);
         }
 
         public void Dispose()
         {
+            // 纯托管数据，无非托管资源需要释放
         }
     }
 }

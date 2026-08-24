@@ -23,8 +23,8 @@ namespace WinKit.Clipboard.Services
         }
 
         /// <summary>
-        /// 将 "Win+Shift+T" / "Ctrl+Alt+V" / "Win+Alt+F1" 等字符串解析为描述符
-        /// 支持：修饰键 (Win/Ctrl/Alt/Shift) + 字母 (A-Z) + 数字 (0-9) + 功能键 (F1-F12)
+        /// 将 "Win+Shift+T" / "Ctrl+Alt+V" / "Win+Alt+F1" / "Ctrl+`" / "Esc" 等字符串解析为描述符
+        /// 支持：修饰键 (Win/Ctrl/Alt/Shift) + 字母 (A-Z) + 数字 (0-9) + 功能键 (F1-F12) + OEM符号键与特殊功能键
         /// </summary>
         public static HotkeyDescriptor? Parse(string raw)
         {
@@ -41,6 +41,93 @@ namespace WinKit.Clipboard.Services
                     case "CTRL":  ctrl  = true; break;
                     case "ALT":   alt   = true; break;
                     case "SHIFT": shift = true; break;
+                    case "ESC":
+                    case "ESCAPE":
+                        vk = 0x1B; // VK_ESCAPE
+                        break;
+                    case "SPACE":
+                        vk = 0x20; // VK_SPACE
+                        break;
+                    case "TAB":
+                        vk = 0x09; // VK_TAB
+                        break;
+                    case "BACK":
+                    case "BACKSPACE":
+                        vk = 0x08; // VK_BACK
+                        break;
+                    case "DELETE":
+                    case "DEL":
+                        vk = 0x2E; // VK_DELETE
+                        break;
+                    case "HOME":
+                        vk = 0x24; // VK_HOME
+                        break;
+                    case "END":
+                        vk = 0x23; // VK_END
+                        break;
+                    case "PAGEUP":
+                    case "PGUP":
+                        vk = 0x21; // VK_PRIOR
+                        break;
+                    case "PAGEDOWN":
+                    case "PGDN":
+                        vk = 0x22; // VK_NEXT
+                        break;
+                    case "`":
+                    case "~":
+                    case "OEMTILDE":
+                        vk = 0xC0; // VK_OEM_3
+                        break;
+                    case "-":
+                    case "_":
+                    case "OEMMINUS":
+                        vk = 0xBD; // VK_OEM_MINUS
+                        break;
+                    case "=":
+                    case "+":
+                    case "OEMPLUS":
+                        vk = 0xBB; // VK_OEM_PLUS
+                        break;
+                    case "[":
+                    case "{":
+                    case "OEMOPENBRACKETS":
+                        vk = 0xDB; // VK_OEM_4
+                        break;
+                    case "]":
+                    case "}":
+                    case "OEM6":
+                        vk = 0xDD; // VK_OEM_6
+                        break;
+                    case ";":
+                    case ":":
+                    case "OEMSEMICOLON":
+                        vk = 0xBA; // VK_OEM_1
+                        break;
+                    case "'":
+                    case "\"":
+                    case "OEMQUOTES":
+                        vk = 0xDE; // VK_OEM_7
+                        break;
+                    case ",":
+                    case "<":
+                    case "OEMCOMMA":
+                        vk = 0xBC; // VK_OEM_COMMA
+                        break;
+                    case ".":
+                    case ">":
+                    case "OEMPERIOD":
+                        vk = 0xBE; // VK_OEM_PERIOD
+                        break;
+                    case "/":
+                    case "?":
+                    case "OEMQUESTION":
+                        vk = 0xBF; // VK_OEM_2
+                        break;
+                    case "\\":
+                    case "|":
+                    case "OEM5":
+                        vk = 0xDC; // VK_OEM_5
+                        break;
                     default:
                         if (upper.Length == 1)
                         {
@@ -80,6 +167,10 @@ namespace WinKit.Clipboard.Services
     /// </summary>
     public class KeyboardHookService : IDisposable
     {
+        /// <summary>
+        /// 当处于快捷键录入捕获模式时设为 true，拦截所有物理按键不传递给系统和其它热键
+        /// </summary>
+        public bool IsCapturing { get; set; } = false;
         // ── Win32 常量 ─────────────────────────────────────────────────
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN     = 0x0100;
@@ -127,7 +218,7 @@ namespace WinKit.Clipboard.Services
         public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         // ── 已注册的热键表 ─────────────────────────────────────────────
-        private readonly List<(HotkeyDescriptor Desc, Action Callback)> _hotkeys = new();
+        private readonly List<(HotkeyDescriptor Desc, Func<bool> Callback)> _hotkeys = new();
 
         private LowLevelKeyboardProc? _proc;
         private IntPtr _hookID = IntPtr.Zero;
@@ -148,11 +239,17 @@ namespace WinKit.Clipboard.Services
         }
 
         // ── 公开 API ───────────────────────────────────────────────────
-        /// <summary>动态注册热键（热重载安全）</summary>
+        /// <summary>动态注册热键（支持无条件拦截）</summary>
         public void RegisterHotkey(string hotkeyString, Action callback)
         {
+            RegisterHotkey(hotkeyString, () => { callback(); return true; });
+        }
+
+        /// <summary>动态注册热键（支持按需条件拦截：返回 true 拦截按键，返回 false 放行物理按键）</summary>
+        public void RegisterHotkey(string hotkeyString, Func<bool> callback)
+        {
             var desc = HotkeyDescriptor.Parse(hotkeyString);
-            if (desc == null) return;
+            if (desc == null || callback == null) return;
 
             // 相同 VK+修饰键组合覆盖已有注册
             _hotkeys.RemoveAll(h => h.Desc.VkCode == desc.VkCode
@@ -173,6 +270,12 @@ namespace WinKit.Clipboard.Services
                                  && h.Desc.Ctrl == desc.Ctrl
                                  && h.Desc.Alt == desc.Alt
                                  && h.Desc.Shift == desc.Shift);
+        }
+
+        /// <summary>注销所有已注册的热键</summary>
+        public void UnregisterAll()
+        {
+            _hotkeys.Clear();
         }
 
         /// <summary>
@@ -276,20 +379,33 @@ namespace WinKit.Clipboard.Services
                     bool altDown   = (GetAsyncKeyState(VK_ALT)   & 0x8000) != 0;
                     bool shiftDown = (GetAsyncKeyState(VK_SHIFT)  & 0x8000) != 0;
 
+                    // 处于快捷键捕获录入状态时，不触发应用内部任何热键，若带 Win 键则注入 0xFF 防止呼出系统开始菜单
+                    if (IsCapturing)
+                    {
+                        if (lwinDown || rwinDown)
+                        {
+                            keybd_event(0xFF, 0, 0, UIntPtr.Zero);
+                            keybd_event(0xFF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                        }
+                        return CallNextHookEx(_hookID, nCode, wParam, lParam);
+                    }
+
                     foreach (var (desc, callback) in _hotkeys)
                     {
                         if (desc.Matches(vkCode, lwinDown, rwinDown, ctrlDown, altDown, shiftDown))
                         {
-                            callback();
-
-                            // 若涉及 Win 键，注入 0xFF 防止开始菜单弹出
-                            if (desc.Win)
+                            bool handled = callback();
+                            if (handled)
                             {
-                                keybd_event(0xFF, 0, 0, UIntPtr.Zero);
-                                keybd_event(0xFF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                                // 若涉及 Win 键，注入 0xFF 防止开始菜单弹出
+                                if (desc.Win)
+                                {
+                                    keybd_event(0xFF, 0, 0, UIntPtr.Zero);
+                                    keybd_event(0xFF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                                }
+                                // 拦截按键，不传递给系统
+                                return (IntPtr)1;
                             }
-                            // 拦截按键，不传递给系统
-                            return (IntPtr)1;
                         }
                     }
                 }

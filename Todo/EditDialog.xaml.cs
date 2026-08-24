@@ -72,8 +72,7 @@ namespace WinKit.Todo
             InputBox.SelectAll();
             InputBox.Focus();
 
-            // 监听失焦自动保存：点击外部任意位置立刻保存退出
-            Deactivated += (s, e) => CommitAndClose();
+            // 仅在双击或确认快捷键时保存退出；单击外部仅转移焦点，不退出编辑
             Closed      += (s, e) => UninstallMouseHook();
 
             // 安装全局鼠标钩子捕获外部双击
@@ -220,43 +219,12 @@ namespace WinKit.Todo
         private void LimitTextVirtualLength(System.Windows.Controls.TextBox textBox)
         {
             var text = textBox.Text;
-            int virtualLength = 0;
-            int limit = 225; // 15 行 * 15 字
-            int truncateIndex = -1;
-
-            for (int i = 0; i < text.Length; i++)
-            {
-                char c = text[i];
-                if (c == '\n')
-                {
-                    virtualLength += 15;
-                }
-                else if (c == '\r')
-                {
-                    // 忽略 \r，避免重复
-                }
-                else
-                {
-                    virtualLength += 1;
-                }
-
-                if (virtualLength > limit)
-                {
-                    truncateIndex = i;
-                    break;
-                }
-            }
-
-            if (truncateIndex != -1)
+            var safeText = WinKit.Todo.Services.TextInputHelper.LimitTextVirtualLength(text, out bool isExceeded);
+            if (isExceeded)
             {
                 _isUpdatingText = true;
-                string truncatedText = text.Substring(0, truncateIndex);
-                if (truncatedText.EndsWith("\r"))
-                {
-                    truncatedText = truncatedText.Substring(0, truncatedText.Length - 1);
-                }
-                int caret = Math.Min(textBox.CaretIndex, truncatedText.Length);
-                textBox.Text = truncatedText;
+                int caret = Math.Min(textBox.CaretIndex, safeText.Length);
+                textBox.Text = safeText;
                 textBox.CaretIndex = caret;
                 _isUpdatingText = false;
             }
