@@ -8,7 +8,7 @@ namespace WinKit.Common
     /// <summary>
     /// 统一配置管理器
     /// </summary>
-    public class SettingsManager : IDisposable
+    public class SettingsManager
     {
         private readonly string _settingsFile;
         private AppSettings _settings;
@@ -65,10 +65,6 @@ namespace WinKit.Common
             }
 
             return new AppSettings();
-        }
-
-        public void Dispose()
-        {
         }
     }
 }

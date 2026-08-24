@@ -28,9 +28,6 @@ namespace WinKit.Clipboard
         // ── Toast 计数 ─────────────────────────────────
         private int           _toastActiveCount = 0;
 
-        // ── 单击/双击区分定时器 ────────────────────────
-        private System.Windows.Threading.DispatcherTimer? _clickTimer;
-        private ClipboardItem? _pendingClickItem;
         private Guid?          _copiedItemId = null;
 
         // ── 前台目标窗口句柄（呼出剪贴板前的活动窗口） ──
@@ -50,6 +47,7 @@ namespace WinKit.Clipboard
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern uint GetDoubleClickTime();
 
         [DllImport("user32.dll")] private static extern int  GetWindowLong(IntPtr hwnd, int index);
         [DllImport("user32.dll")] private static extern int  SetWindowLong(IntPtr hwnd, int index, int newStyle);
@@ -89,14 +87,19 @@ namespace WinKit.Clipboard
             {
                 UpdateUIStates();
                 LoadSettings();
+                SetTitleButtonsOpacity(_isPinned ? 1 : 0);
             };
 
             this.KeyDown += Window_KeyDown;
 
-            // 窗口可见性变化：隐藏时停止鼠标监听
+            // 窗口可见性变化：隐藏时停止鼠标监听并清空未决点击
             this.IsVisibleChanged += (s, e) =>
             {
-                if (!(bool)e.NewValue) _mouseMonitor.Stop();
+                if (!(bool)e.NewValue)
+                {
+                    _mouseMonitor.Stop();
+                    ClickDispatcher.Default.Clear();
+                }
             };
 
             // 配置鼠标点击监听 — 点击剪贴板窗口以外的区域时，若未固定则隐藏
@@ -115,6 +118,21 @@ namespace WinKit.Clipboard
         }
 
         // ══════════════════════════════════════════════
+        // 标题栏按钮悬浮显隐控制（对齐 TodoList）
+        // ══════════════════════════════════════════════
+        private void TitleBar_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e) => SetTitleButtonsOpacity(1);
+        private void TitleBar_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (!_isPinned) SetTitleButtonsOpacity(0);
+        }
+
+        private void SetTitleButtonsOpacity(double opacity)
+        {
+            PinBtn.Opacity   = opacity;
+            CloseBtn.Opacity = opacity;
+        }
+
+        // ══════════════════════════════════════════════
         // 设置加载与保存
         // ══════════════════════════════════════════════
         private void LoadSettings()
@@ -127,7 +145,7 @@ namespace WinKit.Clipboard
         private void UpdatePinButton()
         {
             PinBtn.Content  = _isPinned ? "📍" : "📌";
-            PinBtn.ToolTip  = _isPinned ? "取消固定" : "固定（粘贴后不消失）";
+            PinBtn.ToolTip  = _isPinned ? "取消固定" : "固定";
         }
 
         private void TogglePinState()
@@ -135,6 +153,7 @@ namespace WinKit.Clipboard
             _isPinned      = !_isPinned;
             this.Topmost   = _isPinned;
             UpdatePinButton();
+            SetTitleButtonsOpacity(_isPinned ? 1 : 0);
 
             var settings = _settingsManager.Settings;
             settings.PasteIsPinned = _isPinned;
@@ -278,55 +297,20 @@ namespace WinKit.Clipboard
         public void CloseBtn_Click(object sender, RoutedEventArgs e) => Hide();
 
         // ══════════════════════════════════════════════
-        // Window_Deactivated（仅对进程内切换生效，原行为保留，固定时不隐藏）
-        // 注意：对进程外窗口失效，外部点击隐藏已由 GlobalMouseClickMonitor 接管
-        // ══════════════════════════════════════════════
-        private void Window_Deactivated(object sender, EventArgs e)
-        {
-            // 已由鼠标监听器接管，此处空置，避免与监听器冲突
-        }
-
-        // ══════════════════════════════════════════════
-        // 列表项点击 — 保留原汁原味的单击/双击区分逻辑
+        // 列表项点击 — 统一接入 ClickDispatcher 调度单击/双击
         // ══════════════════════════════════════════════
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // 若点击的是删除按钮，直接跳过
+            // 若点击的是列表项内的子按钮（如删除按钮），直接跳过交由按钮 Click 处理
             if (IsClickOnDeleteButton(e.OriginalSource as DependencyObject)) return;
 
             if (sender is ListBoxItem item && item.Content is ClipboardItem clipItem)
             {
-                if (e.ClickCount == 1)
-                {
-                    // 单击：启动 250ms 定时器，超时后执行单击逻辑（复制置顶）
-                    _pendingClickItem = clipItem;
-                    if (_clickTimer == null)
-                    {
-                        _clickTimer          = new System.Windows.Threading.DispatcherTimer();
-                        _clickTimer.Interval = TimeSpan.FromMilliseconds(250);
-                        _clickTimer.Tick    += ClickTimer_Tick;
-                    }
-                    _clickTimer.Start();
-                }
-                else if (e.ClickCount >= 2)
-                {
-                    // 双击：立即取消单击定时器，执行双击逻辑（填充粘贴）
-                    _clickTimer?.Stop();
-                    _pendingClickItem = null;
-                    UseSelectedItem(clipItem);
-                    e.Handled = true;
-                }
-            }
-        }
-
-        private void ClickTimer_Tick(object? sender, EventArgs e)
-        {
-            _clickTimer?.Stop();
-            if (_pendingClickItem != null)
-            {
-                var item      = _pendingClickItem;
-                _pendingClickItem = null;
-                ClickItem(item);
+                ClickDispatcher.Default.HandleClick(
+                    clipItem,
+                    () => ClickItem(clipItem),
+                    () => UseSelectedItem(clipItem)
+                );
             }
         }
 
@@ -393,15 +377,19 @@ namespace WinKit.Clipboard
                     await Task.Delay(60);
                 }
 
-                // ③ 将前台焦点精准归还给呼出剪贴板前的工作窗口
+                // ③ 穿透 Windows 权限限制，精准将前台焦点归还给目标输入窗口
                 if (_lastTargetHwnd != IntPtr.Zero && IsWindow(_lastTargetHwnd))
                 {
-                    SetForegroundWindow(_lastTargetHwnd);
-                    await Task.Delay(80);
+                    NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
+                    for (int wait = 0; wait < 6 && GetForegroundWindow() != _lastTargetHwnd; wait++)
+                    {
+                        await Task.Delay(30);
+                    }
+                    await Task.Delay(30);
                 }
 
                 // ④ 模拟 Ctrl+V 粘贴
-                SimulateCtrlV();
+                NativeMethods.SimulateCtrlV();
             }
             catch (Exception ex)
             {

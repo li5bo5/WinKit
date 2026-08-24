@@ -371,5 +371,275 @@
             </Setter>
         </Style>
 
+        <!-- ══════════════════════════════════════════════
+             统一设计系统：窗体外壳与卡片容器
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="FluentWindowBorder" TargetType="Border">
+            <Setter Property="Background" Value="#E6F5F5F5"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="BorderBrush" Value="#1A000000"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.12" Color="Black"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PreferencesCard" TargetType="Border">
+            <Setter Property="Background" Value="#99FFFFFF"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderBrush" Value="#15000000"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             统一设计系统：主按钮与次级线框按钮
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="FluentPrimaryButton" TargetType="Button">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="#2A5CB8"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#3A6DC8"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#1F4AA0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FluentSecondaryButton" TargetType="Button">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="Transparent"
+                                BorderBrush="#33000000"
+                                BorderThickness="1"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#12000000"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#20000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             统一设计系统：半透明圆角 ComboBox（与 InlineTextBox 对齐）
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="FluentComboBox" TargetType="ComboBox">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="Background" Value="#A6FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#1F000000"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,0,24,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <!-- 触发器外框与背景 -->
+                            <ToggleButton x:Name="ToggleButton"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          Focusable="False"
+                                          IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="TemplateRoot"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="{StaticResource Radius6}">
+                                            <Grid>
+                                                <!-- 右侧几何箭头 -->
+                                                <Path x:Name="Arrow"
+                                                      Data="M 0,0 L 4,4 L 8,0"
+                                                      Stroke="#666"
+                                                      StrokeThickness="1.5"
+                                                      HorizontalAlignment="Right"
+                                                      VerticalAlignment="Center"
+                                                      Margin="0,0,10,0"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="TemplateRoot" Property="Background" Value="#BFFFFFFF"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="TemplateRoot" Property="Background" Value="#F2FFFFFF"/>
+                                                <Setter TargetName="TemplateRoot" Property="BorderBrush" Value="#44000000"/>
+                                                <Setter TargetName="Arrow" Property="Data" Value="M 0,4 L 4,0 L 8,4"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <!-- 当前选中项文本呈现 -->
+                            <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              HorizontalAlignment="Left"
+                                              IsHitTestVisible="False"/>
+
+                            <!-- 下拉弹出列表 -->
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Slide">
+                                <Border x:Name="DropDownBorder"
+                                        Background="#E6F5F5F5"
+                                        BorderBrush="#22000000"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        MinWidth="{Binding ActualWidth, ElementName=ToggleButton}"
+                                        MaxHeight="200"
+                                        Margin="0,2,0,0">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" Color="Black"/>
+                                    </Border.Effect>
+                                    <ScrollViewer Style="{StaticResource NarrowScrollViewer}">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" Margin="2,4"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="itemBd"
+                                Background="Transparent"
+                                CornerRadius="4"
+                                Margin="2,1">
+                            <ContentPresenter VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="itemBd" Property="Background" Value="#14000000"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="itemBd" Property="Background" Value="#22000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             统一设计系统：精致微圆角 CheckBox（与 InlineTextBox 对齐）
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="FluentCheckBox" TargetType="CheckBox">
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 复选小方块 -->
+                            <Border x:Name="boxBd"
+                                    Grid.Column="0"
+                                    Width="18" Height="18"
+                                    Background="#A6FFFFFF"
+                                    BorderBrush="#1F000000"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    VerticalAlignment="Center">
+                                <Path x:Name="checkMark"
+                                      Data="M 3,9 L 7,13 L 15,5"
+                                      Stroke="White"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Visibility="Collapsed"/>
+                            </Border>
+
+                            <!-- 标签文字 -->
+                            <ContentPresenter Grid.Column="1"
+                                              Margin="8,0,0,0"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="boxBd" Property="Background" Value="#BFFFFFFF"/>
+                                <Setter TargetName="boxBd" Property="BorderBrush" Value="#44000000"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="boxBd" Property="Background" Value="#2A5CB8"/>
+                                <Setter TargetName="boxBd" Property="BorderBrush" Value="#2A5CB8"/>
+                                <Setter TargetName="checkMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsChecked" Value="True"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="boxBd" Property="Background" Value="#3A6DC8"/>
+                                <Setter TargetName="boxBd" Property="BorderBrush" Value="#3A6DC8"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </Application.Resources>
 </Application>

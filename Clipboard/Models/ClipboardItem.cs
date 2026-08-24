@@ -16,9 +16,10 @@ namespace WinKit.Clipboard.Models
     public class ClipboardItem
     {
         public Guid Id { get; set; } = Guid.NewGuid();
-        public ClipboardItemType Type { get; set; }
+        public ClipboardItemType Type { get; set; } = ClipboardItemType.Text;
+        public string ContentType { get; set; } = "Text";
         public string? Content { get; set; }
-        public string? ContentHash { get; set; }
+        public string? SourceApp { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.Now;
 
         /// <summary>

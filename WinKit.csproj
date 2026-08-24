@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WinKit</AssemblyName>
     <RootNamespace>WinKit</RootNamespace>
-    <Version>2.2.0</Version>
+    <Version>2.3.0</Version>
     <Authors>li5bo5</Authors>
     <Company>li5bo5</Company>
     <Product>WinKit</Product>
@@ -28,7 +28,6 @@
 
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

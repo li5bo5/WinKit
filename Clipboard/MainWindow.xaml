@@ -10,50 +10,48 @@
         ShowInTaskbar="False"
         Topmost="True"
         WindowStartupLocation="Manual"
-        Deactivated="Window_Deactivated"
         ResizeMode="NoResize">
 
-    <!-- 主容器：圆角边框 + 60% 不透明白色背景 (#99FFFFFF) -->
+    <!-- 主容器：圆角边框 + 统一磨砂白色背景 -->
     <Border x:Name="RootBorder"
-            Background="#CCFFFFFF"
-            CornerRadius="10"
-            BorderBrush="#22000000"
-            BorderThickness="1">
+            Style="{StaticResource FluentWindowBorder}">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="36"/>
+                <RowDefinition Height="40"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="32"/>
             </Grid.RowDefinitions>
 
             <!-- ══════════════════════════════════════════
-                 标题栏：拖动 + 关闭按钮
+                 标题栏：拖动 + 固定/关闭按钮
             ══════════════════════════════════════════ -->
             <Grid Grid.Row="0" x:Name="TitleBar"
                   MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                  MouseEnter="TitleBar_MouseEnter"
+                  MouseLeave="TitleBar_MouseLeave"
                   Background="Transparent">
 
                 <TextBlock Text="Clipboard"
                            VerticalAlignment="Center"
-                           Margin="14,0"
-                           FontSize="13"
+                           Margin="16,0"
+                           FontSize="13.5"
                            FontWeight="SemiBold"
-                           Foreground="#333"/>
+                           Foreground="#222"/>
 
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Right"
-                            Margin="0,0,4,0">
+                            Margin="0,0,8,0">
                     <Button x:Name="PinBtn"
                             Content="📌"
                             Style="{StaticResource TitleBarBtn}"
-                            Opacity="1"
+                            Opacity="0"
                             Click="PinBtn_Click"
-                            ToolTip="固定（粘贴后不消失）"/>
+                            ToolTip="固定"/>
 
                     <Button x:Name="CloseBtn"
                             Content="✕"
                             Style="{StaticResource TitleBarBtn}"
-                            Opacity="1"
+                            Opacity="0"
                             Click="CloseBtn_Click"
                             ToolTip="隐藏"/>
                 </StackPanel>

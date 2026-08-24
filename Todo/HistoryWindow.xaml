@@ -1,11 +1,11 @@
 <Window x:Class="WinKit.Todo.HistoryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="历史记录"
+        Title="待办历史"
         Width="320"
-        Height="420"
-        MinWidth="260"
-        MinHeight="300"
+        Height="440"
+        MinWidth="240"
+        MinHeight="260"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -14,68 +14,50 @@
         Topmost="True"
         WindowStartupLocation="CenterScreen">
 
-    <Window.Resources>
-        <!-- 微妙淡出淡入动画 -->
-        <Style TargetType="Button" x:Key="IconButton">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#666"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="4,2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Foreground" Value="#000"/>
-                    <Setter Property="Background" Value="#20000000"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-    </Window.Resources>
-
     <!-- 窗口主容器 -->
-    <Border x:Name="RootBorder"
-            Background="#E6FFFFFF"
-            CornerRadius="12"
-            BorderBrush="#33000000"
-            BorderThickness="1">
-        <Grid Margin="12">
+    <Border Style="{StaticResource FluentWindowBorder}"
+            MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="40"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="46"/>
             </Grid.RowDefinitions>
 
             <!-- 1. 标题栏 -->
-            <Grid Grid.Row="0" x:Name="TitleBar" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="📜 待办历史记录" FontSize="14" FontWeight="Bold" Foreground="#333"/>
-                </StackPanel>
+            <Grid Grid.Row="0" x:Name="TitleBar" Background="Transparent">
+                <TextBlock Text="待办历史"
+                           VerticalAlignment="Center"
+                           Margin="16,0"
+                           FontSize="13.5"
+                           FontWeight="SemiBold"
+                           Foreground="#222"/>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <Button x:Name="CloseBtn" Content="✕" Style="{StaticResource IconButton}" Click="CloseBtn_Click" ToolTip="关闭"/>
-                </StackPanel>
+                <Button x:Name="CloseBtn"
+                        Content="✕"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,10,0"
+                        Width="26" Height="26"
+                        Style="{StaticResource TitleBarBtn}"
+                        Opacity="1"
+                        Click="CloseBtn_Click"
+                        ToolTip="关闭"/>
             </Grid>
 
-            <!-- 2. 工具栏 -->
-            <Grid Grid.Row="1" Margin="0,8,0,8">
-                <TextBlock x:Name="CountText" Text="0 条记录" FontSize="11" Foreground="#777" VerticalAlignment="Center"/>
-                <Button x:Name="ClearAllBtn" Content="清空历史" HorizontalAlignment="Right" Style="{StaticResource IconButton}" FontSize="11" Foreground="#D9534F" Click="ClearAllBtn_Click"/>
+            <!-- 2. 统计与提示栏 -->
+            <Grid Grid.Row="1" Margin="16,2,16,6">
+                <TextBlock x:Name="CountText" Text="0 条记录" FontSize="11" Foreground="#888" VerticalAlignment="Center"/>
             </Grid>
 
             <!-- 3. 内容列表区 -->
-            <Grid Grid.Row="2">
+            <Grid Grid.Row="2" Margin="16,0,16,0">
                 <!-- 空白占位 -->
                 <TextBlock x:Name="EmptyPlaceholder"
-                           Text="暂无历史记录"
+                           Text="暂无已删除的待办历史"
                            FontSize="12"
-                           Foreground="#999"
+                           Foreground="#88000000"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Visibility="Collapsed"/>
@@ -84,6 +66,7 @@
                 <ListBox x:Name="HistoryList"
                          Background="Transparent"
                          BorderThickness="0"
+                         Style="{StaticResource {x:Type ListBox}}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto">
                     <ListBox.ItemContainerStyle>
@@ -104,28 +87,92 @@
 
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="#A0FFFFFF" CornerRadius="8" BorderBrush="#1F000000" BorderThickness="1" Padding="10,8">
+                            <Border Background="#99FFFFFF"
+                                    BorderBrush="#15000000"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding FormattedTime}" FontSize="10" Foreground="#888" Margin="0,0,0,2"/>
-                                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#222" TextWrapping="Wrap"/>
+                                    <!-- 待办标题 + 删除时间 -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontSize="12.5"
+                                                   Foreground="#222"
+                                                   TextWrapping="Wrap"
+                                                   LineHeight="16"
+                                                   LineStackingStrategy="BlockLineHeight"
+                                                   MaxHeight="50"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding FormattedTime}"
+                                                   FontSize="10"
+                                                   Foreground="#888"
+                                                   Margin="0,3,0,0"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
-                                        <Button Content="↩ 恢复" Style="{StaticResource IconButton}" FontSize="11" Foreground="#28A745" Tag="{Binding}" Click="RestoreBtn_Click" ToolTip="恢复到待办列表" Margin="0,0,4,0"/>
-                                        <Button Content="🗑" Style="{StaticResource IconButton}" FontSize="11" Foreground="#DC3545" Tag="{Binding}" Click="DeleteBtn_Click" ToolTip="彻底删除"/>
-                                    </StackPanel>
+                                    <!-- 还原按钮（图标化 + ToolTip） -->
+                                    <Button Grid.Column="1"
+                                            Content="⟲"
+                                            Style="{StaticResource ActionBtn}"
+                                            Width="22" Height="22"
+                                            FontSize="13"
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,4,0"
+                                            Tag="{Binding}"
+                                            Click="RestoreBtn_Click"
+                                            ToolTip="还原至待办列表"/>
+
+                                    <!-- 彻底删除按钮 -->
+                                    <Button Grid.Column="2"
+                                            Content="✕"
+                                            Style="{StaticResource ActionBtn}"
+                                            Width="22" Height="22"
+                                            FontSize="11"
+                                            VerticalAlignment="Center"
+                                            Tag="{Binding}"
+                                            Click="DeleteBtn_Click"
+                                            ToolTip="彻底删除"/>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
             </Grid>
+
+            <!-- 4. 底部栏：清空历史 -->
+            <Border Grid.Row="3" BorderBrush="#15000000" BorderThickness="0,1,0,0">
+                <Grid Margin="16,0">
+                    <Button x:Name="ClearAllBtn"
+                            Content="清空历史"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Width="80"
+                            Style="{StaticResource FluentSecondaryButton}"
+                            Click="ClearAllBtn_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- 右下角自定义 ResizeGrip 缩放手柄 -->
+            <Grid Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                <Border x:Name="ResizeGripArea"
+                        Width="12" Height="12"
+                        Background="Transparent"
+                        Cursor="SizeNWSE"
+                        Opacity="0.4"
+                        MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
+                        ToolTip="拖动调整大小">
+                    <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                        <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                        <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                    </Canvas>
+                </Border>
+            </Grid>
+
         </Grid>
     </Border>
 </Window>

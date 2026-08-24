@@ -16,8 +16,9 @@ namespace WinKit
         private Todo.MainWindow?      _todoWindow;
         private Clipboard.MainWindow? _pasteWindow;
 
-        public ClipboardManager?  ClipboardManager  => _clipboardManager;
-        public SettingsManager?   SettingsManager   => _settingsManager;
+        public ClipboardManager?   ClipboardManager   => _clipboardManager;
+        public SettingsManager?    SettingsManager    => _settingsManager;
+        public KeyboardHookService? KeyboardHookService => _keyboardHookService;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -44,11 +45,9 @@ namespace WinKit
             _trayHelper = new TrayHelper(this, _settingsManager, _todoWindow, _pasteWindow);
             _todoWindow.SetTray(_trayHelper);
 
-            // 5. 开启低级键盘钩子，注册所有自定义全局快捷键
-            if (_settingsManager.Settings.PasteEnableMonitoring)
-            {
-                RegisterGlobalKeyboardHook();
-            }
+            // 5. 开启低级键盘钩子，注册所有自定义全局快捷键与 Esc 全局分发
+            _keyboardHookService = new KeyboardHookService();
+            RegisterAllHotkeys();
 
             // 6. 订阅快捷键变更通知：用户保存新配置后热重载
             _trayHelper.SubscribeHotkeysChanged(ReloadHotkeys);
@@ -71,49 +70,57 @@ namespace WinKit
             if (enable)
             {
                 _clipboardService?.StartMonitoring();
-                RegisterGlobalKeyboardHook();
             }
             else
             {
                 _clipboardService?.StopMonitoring();
-                _keyboardHookService?.Dispose();
-                _keyboardHookService = null;
                 _pasteWindow?.Hide();
             }
+            RegisterAllHotkeys();
         }
 
         // ══════════════════════════════════════════════
-        // 注册 / 热重载全局键盘钩子
+        // 注册 / 热重载全局键盘钩子（Todo 与 Clipboard 独立）
         // ══════════════════════════════════════════════
-        private void RegisterGlobalKeyboardHook()
+        private void RegisterAllHotkeys()
         {
-            // 释放旧钩子
-            _keyboardHookService?.Dispose();
-            _keyboardHookService = new KeyboardHookService();
+            if (_keyboardHookService == null || _settingsManager == null) return;
 
-            var settings = _settingsManager!.Settings;
+            _keyboardHookService.UnregisterAll();
+            var settings = _settingsManager.Settings;
 
-            // ── 1. 唤出 / 隐藏剪贴板 ─────────────────────────
-            _keyboardHookService.RegisterHotkey(settings.HotkeyClipboardToggle, () =>
+            // ── 0. 全局 Esc 键：仅当剪贴板窗口可见时将其隐藏并拦截，不可见时完全放行 ────
+            _keyboardHookService.RegisterHotkey("Esc", () =>
             {
-                Dispatcher.Invoke(() =>
+                if (_pasteWindow != null && _pasteWindow.IsVisible)
                 {
-                    if (_pasteWindow == null) return;
-                    if (_pasteWindow.IsVisible)
-                        _pasteWindow.Hide();
-                    else
-                        _pasteWindow.ShowAtMouse();
-                });
+                    Dispatcher.Invoke(() => _pasteWindow.Hide());
+                    return true; // 剪贴板已可见，消费并拦截 Esc
+                }
+                return false; // 剪贴板未可见，完全放行 Esc 给前台活动窗口（TodoList/EditDialog 等）
             });
 
-            // ── 2. 置顶显示快捷键（置顶时取消置顶，未置顶时置顶并取消穿透）───
+            // ── 1. 置顶显示快捷键（无条件常驻）───────────────────────
             _keyboardHookService.RegisterHotkey(settings.HotkeyTodoTopToggle, () =>
             {
                 Dispatcher.Invoke(() => _todoWindow?.ToggleTopmostAndPassThrough());
             });
 
-            // ── 3. Win+S 保存并退出 Todo 编辑（由 Todo 窗口内部 PreviewKeyDown 已处理）────
-            // KeyboardHookService 层无需额外注册，避免与 InlineEditBox 内部 Win+S 冲突
+            // ── 2. 唤出 / 隐藏剪贴板（受剪贴板监控总开关控制）────────
+            if (settings.PasteEnableMonitoring)
+            {
+                _keyboardHookService.RegisterHotkey(settings.HotkeyClipboardToggle, () =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (_pasteWindow == null) return;
+                        if (_pasteWindow.IsVisible)
+                            _pasteWindow.Hide();
+                        else
+                            _pasteWindow.ShowAtMouse();
+                    });
+                });
+            }
         }
 
         // ══════════════════════════════════════════════
@@ -121,11 +128,7 @@ namespace WinKit
         // ══════════════════════════════════════════════
         private void ReloadHotkeys()
         {
-            Dispatcher.Invoke(() =>
-            {
-                if (_settingsManager?.Settings.PasteEnableMonitoring == true)
-                    RegisterGlobalKeyboardHook();
-            });
+            Dispatcher.Invoke(RegisterAllHotkeys);
         }
 
         protected override void OnExit(ExitEventArgs e)
@@ -135,7 +138,6 @@ namespace WinKit
             _clipboardService?.Dispose();
             _trayHelper?.Dispose();
             _clipboardManager?.Dispose();
-            _settingsManager?.Dispose();
 
             base.OnExit(e);
         }

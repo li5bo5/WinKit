@@ -29,8 +29,8 @@ namespace WinKit.Todo
         private const int HTTRANSPARENT = -1;
 
         private readonly ObservableCollection<TodoItem> _items = new();
-        private readonly MarkdownStorage _storage;
-        private readonly HistoryStorage _historyStorage;
+        private readonly TodoService _todoService;
+        private readonly RecycleBinService _recycleBinService;
         private readonly SettingsManager _settingsManager;
         private bool _isUpdatingText = false;
 
@@ -106,9 +106,9 @@ namespace WinKit.Todo
             // 确保窗口句柄创建，以便后续初始化设置和 Win32 钩子正常运行
             new WindowInteropHelper(this).EnsureHandle();
 
-            _storage = new MarkdownStorage();
-            _historyStorage = new HistoryStorage();
-            foreach (var item in _storage.LoadTodos())
+            _todoService = new TodoService();
+            _recycleBinService = new RecycleBinService(_settingsManager);
+            foreach (var item in _todoService.LoadTodos())
                 _items.Add(item);
             TodoList.ItemsSource = _items;
 
@@ -127,11 +127,11 @@ namespace WinKit.Todo
             // 初始化占位符状态
             UpdateEmptyPlaceholder();
 
-            // 根据置顶或穿透状态决定标题栏按钮初始透明度
+            // 初始状态下标题栏按钮保持隐藏（仅悬停时浮现）
             Loaded += (s, e) =>
             { 
                 UpdateEmptyPlaceholder(); 
-                SetTitleButtonsOpacity((_isPinned || _isPassThrough) ? 1 : 0); 
+                SetTitleButtonsOpacity(0); 
             };
         }
 
@@ -198,13 +198,10 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // TitleBar 区域悬停：控制 TitleBar 按钮显示
+        // TitleBar 区域悬停：严格鼠标悬停显隐控制
         // ══════════════════════════════════════════════
         private void TitleBar_MouseEnter(object sender, WinMouse e) => SetTitleButtonsOpacity(1);
-        private void TitleBar_MouseLeave(object sender, WinMouse e)
-        {
-            if (!_isPinned && !_isPassThrough) SetTitleButtonsOpacity(0);
-        }
+        private void TitleBar_MouseLeave(object sender, WinMouse e) => SetTitleButtonsOpacity(0);
 
         private void SetTitleButtonsOpacity(double opacity)
         {
@@ -253,13 +250,11 @@ namespace WinKit.Todo
             {
                 PinBtn.Content = "📍";
                 PinBtn.ToolTip = "取消置顶";
-                SetTitleButtonsOpacity(1);
             }
             else
             {
                 PinBtn.Content = "📌";
                 PinBtn.ToolTip = "置顶";
-                if (!_isPassThrough) SetTitleButtonsOpacity(0);
             }
             SaveSettings();
         }
@@ -286,7 +281,6 @@ namespace WinKit.Todo
             {
                 PassThroughBtn.Content = "◉";
                 PassThroughBtn.ToolTip = "取消穿透";
-                SetTitleButtonsOpacity(1);
                 ResizeGripArea.Opacity = 0;
                 
                 StartPassThroughTimer();
@@ -295,7 +289,6 @@ namespace WinKit.Todo
             {
                 PassThroughBtn.Content = "⊙";
                 PassThroughBtn.ToolTip = "穿透";
-                if (!_isPinned) SetTitleButtonsOpacity(0);
                 
                 StopPassThroughTimer();
                 
@@ -388,6 +381,9 @@ namespace WinKit.Todo
             Height = newH;
         }
 
+        public bool IsPreferencesWindowOpen { get; set; } = false;
+        public EditDialog? ActiveEditDialog { get; set; } = null;
+
         private Rect GetCurrentScreenWorkArea()
         {
             var hwnd = new WindowInteropHelper(this).Handle;
@@ -429,6 +425,8 @@ namespace WinKit.Todo
 
         private void TodoList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
+            if (IsPreferencesWindowOpen) return;
+
             var src = e.OriginalSource as DependencyObject;
             while (src != null)
             {
@@ -447,15 +445,26 @@ namespace WinKit.Todo
 
         private void ShowInlineInput()
         {
+            if (IsPreferencesWindowOpen) return;
+
             InlineInputArea.Visibility = Visibility.Visible;
             InlineEditBox.Text         = string.Empty;
             InlineEditBox.Focus();
         }
 
-        private void HideInlineInput()
+        public void HideInlineInput()
         {
             InlineInputArea.Visibility = Visibility.Collapsed;
             InlineEditBox.Text         = string.Empty;
+        }
+
+        /// <summary>
+        /// 先收起内联输入框，然后隐藏 TodoList 主窗口
+        /// </summary>
+        public void HideInlineInputAndWindow()
+        {
+            HideInlineInput();
+            Hide();
         }
 
         private void InlineEditBox_PreviewKeyDown(object sender, WinKey e)
@@ -494,43 +503,12 @@ namespace WinKit.Todo
         private void LimitTextVirtualLength(System.Windows.Controls.TextBox textBox)
         {
             var text = textBox.Text;
-            int virtualLength = 0;
-            int limit = 225; // 15 行 * 15 字
-            int truncateIndex = -1;
-
-            for (int i = 0; i < text.Length; i++)
-            {
-                char c = text[i];
-                if (c == '\n')
-                {
-                    virtualLength += 15;
-                }
-                else if (c == '\r')
-                {
-                    // 忽略 \r，避免重复累加
-                }
-                else
-                {
-                    virtualLength += 1;
-                }
-
-                if (virtualLength > limit)
-                {
-                    truncateIndex = i;
-                    break;
-                }
-            }
-
-            if (truncateIndex != -1)
+            var safeText = TextInputHelper.LimitTextVirtualLength(text, out bool isExceeded);
+            if (isExceeded)
             {
                 _isUpdatingText = true;
-                string truncatedText = text.Substring(0, truncateIndex);
-                if (truncatedText.EndsWith("\r"))
-                {
-                    truncatedText = truncatedText.Substring(0, truncatedText.Length - 1);
-                }
-                int caret = Math.Min(textBox.CaretIndex, truncatedText.Length);
-                textBox.Text = truncatedText;
+                int caret = Math.Min(textBox.CaretIndex, safeText.Length);
+                textBox.Text = safeText;
                 textBox.CaretIndex = caret;
                 _isUpdatingText = false;
             }
@@ -551,7 +529,7 @@ namespace WinKit.Todo
             if (!string.IsNullOrEmpty(text))
             {
                 _items.Add(new TodoItem { Title = text });
-                _storage.SaveTodos(_items);
+                _todoService.SaveTodos(_items);
                 if (_items.Count > 0)
                     TodoList.ScrollIntoView(_items[^1]);
             }
@@ -565,10 +543,12 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // 编辑 / 删除
+        // 编辑 / 删除 / 恢复
         // ══════════════════════════════════════════════
         private void EditBtn_Click(object sender, RoutedEventArgs e)
         {
+            if (IsPreferencesWindowOpen) return;
+
             var id   = (Guid)((WinButton)sender).Tag;
             var item = _items.FirstOrDefault(i => i.Id == id);
             if (item != null) ShowEditDialog(item);
@@ -578,37 +558,74 @@ namespace WinKit.Todo
         {
             if (string.IsNullOrWhiteSpace(title)) return;
             _items.Add(new TodoItem { Title = title });
-            _storage.SaveTodos(_items);
+            _todoService.SaveTodos(_items);
             if (_items.Count > 0)
                 TodoList.ScrollIntoView(_items[^1]);
+        }
+
+        /// <summary>
+        /// 从回收站还原待办事项（保持原始 ID 和创建时间）
+        /// </summary>
+        public void RestoreTodoItem(TodoItem restoredItem)
+        {
+            if (restoredItem == null || string.IsNullOrWhiteSpace(restoredItem.Title)) return;
+            _items.Add(restoredItem);
+            _todoService.SaveTodos(_items);
+            if (_items.Count > 0)
+                TodoList.ScrollIntoView(_items[^1]);
+        }
+
+        private HistoryWindow? _historyWindow;
+
+        public void SetHistoryWindow(HistoryWindow historyWindow)
+        {
+            _historyWindow = historyWindow;
         }
 
         public void DeleteTodoItem(TodoItem item)
         {
             if (item == null) return;
-            _historyStorage.AddHistory(item.Title);
+            _recycleBinService.AddToRecycleBin(item);
             _items.Remove(item);
-            _storage.SaveTodos(_items);
+            _todoService.SaveTodos(_items);
+
+            _historyWindow?.Dispatcher.Invoke(() =>
+            {
+                if (_historyWindow.IsVisible)
+                {
+                    _historyWindow.ReloadRecycleBin();
+                }
+            });
         }
 
         private void ShowEditDialog(TodoItem item)
         {
+            if (IsPreferencesWindowOpen) return;
+
             var dlg = new EditDialog(item.Title) { Owner = this };
-            if (dlg.ShowDialog() == true)
+            ActiveEditDialog = dlg;
+            try
             {
-                if (string.IsNullOrWhiteSpace(dlg.ResultText))
+                if (dlg.ShowDialog() == true)
                 {
-                    // 空值即删除
-                    DeleteTodoItem(item);
+                    if (string.IsNullOrWhiteSpace(dlg.ResultText))
+                    {
+                        // 空值即删除
+                        DeleteTodoItem(item);
+                    }
+                    else
+                    {
+                        item.Title = dlg.ResultText;
+                        var idx = _items.IndexOf(item);
+                        _items.RemoveAt(idx);
+                        _items.Insert(idx, item);
+                        _todoService.SaveTodos(_items);
+                    }
                 }
-                else
-                {
-                    item.Title = dlg.ResultText;
-                    var idx = _items.IndexOf(item);
-                    _items.RemoveAt(idx);
-                    _items.Insert(idx, item);
-                    _storage.SaveTodos(_items);
-                }
+            }
+            finally
+            {
+                ActiveEditDialog = null;
             }
         }
 
@@ -649,7 +666,7 @@ namespace WinKit.Todo
             if (target == null || target == _dragItem) return;
             var oldIdx = _items.IndexOf(_dragItem);
             var newIdx = _items.IndexOf(target);
-            if (oldIdx >= 0 && newIdx >= 0) { _items.Move(oldIdx, newIdx); _storage.SaveTodos(_items); }
+            if (oldIdx >= 0 && newIdx >= 0) { _items.Move(oldIdx, newIdx); _todoService.SaveTodos(_items); }
         }
 
         // ══════════════════════════════════════════════
@@ -755,7 +772,6 @@ namespace WinKit.Todo
                 this.Topmost = false;
                 PinBtn.Content = "📌";
                 PinBtn.ToolTip = "置顶";
-                if (!_isPassThrough) SetTitleButtonsOpacity(0);
             }
             else
             {
@@ -764,7 +780,6 @@ namespace WinKit.Todo
                 this.Topmost = true;
                 PinBtn.Content = "📍";
                 PinBtn.ToolTip = "取消置顶";
-                SetTitleButtonsOpacity(1);
 
                 // 取消穿透（若处于穿透状态）
                 if (_isPassThrough)
@@ -780,6 +795,7 @@ namespace WinKit.Todo
                 }
             }
 
+            SetTitleButtonsOpacity(0);
             Activate();
             _tray?.SyncPinMenuItem();
             _tray?.SyncPassThroughMenuItem();

@@ -13,15 +13,12 @@
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
         ResizeMode="NoResize">
 
-    <!-- 主容器：圆角边框 + 60% 不透明白色背景 -->
+    <!-- 主容器：圆角边框 + 统一磨砂白色背景 -->
     <Border x:Name="RootBorder"
-            Background="#CCFFFFFF"
-            CornerRadius="10"
-            BorderBrush="#22000000"
-            BorderThickness="1">
+            Style="{StaticResource FluentWindowBorder}">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="36"/>
+                <RowDefinition Height="40"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -36,16 +33,16 @@
 
                 <TextBlock Text="TodoList"
                            VerticalAlignment="Center"
-                           Margin="14,0"
-                           FontSize="13"
+                           Margin="16,0"
+                           FontSize="13.5"
                            FontWeight="SemiBold"
-                           Foreground="#333"/>
+                           Foreground="#222"/>
 
                 <!-- 右侧按钮组：置顶 | 穿透 | 关闭 -->
                 <StackPanel x:Name="TitleButtons"
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
-                            Margin="0,0,4,0">
+                            Margin="0,0,8,0">
 
                     <Button x:Name="PinBtn"
                              Content="📍"

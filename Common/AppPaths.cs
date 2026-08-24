@@ -16,29 +16,24 @@ namespace WinKit.Common
             "WinKit");
 
         /// <summary>
-        /// 待办事项保存路径 (todos.md)
+        /// 待办事项明文保存路径 (todos.jsonl)
         /// </summary>
-        public static readonly string Todos = Path.Combine(AppData, "todos.md");
+        public static readonly string Todos = Path.Combine(AppData, "todos.jsonl");
 
         /// <summary>
-        /// 历史记录保存路径 (history.md)
+        /// 待办回收站明文保存路径 (recycle_bin.jsonl)
         /// </summary>
-        public static readonly string History = Path.Combine(AppData, "history.md");
+        public static readonly string RecycleBin = Path.Combine(AppData, "recycle_bin.jsonl");
 
         /// <summary>
-        /// SQLite 剪贴板数据库路径 (clipboard.db)
+        /// 剪贴板历史明文保存路径 (clipboard.jsonl)
         /// </summary>
-        public static readonly string Database = Path.Combine(AppData, "clipboard.db");
+        public static readonly string Clipboard = Path.Combine(AppData, "clipboard.jsonl");
 
         /// <summary>
         /// 统一配置文件路径 (settings.json)
         /// </summary>
         public static readonly string Settings = Path.Combine(AppData, "settings.json");
-
-        /// <summary>
-        /// 键盘钩子与热键日志路径
-        /// </summary>
-        public static readonly string HotKeyLog = Path.Combine(AppData, "hotkey.log");
 
         /// <summary>
         /// 确保数据存放目录存在
