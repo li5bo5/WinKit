@@ -22,8 +22,8 @@
 
             <!-- 应用名 & 版本 -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                <TextBlock Text="WinKit" FontSize="18" FontWeight="Bold" Foreground="#222"/>
-                <TextBlock x:Name="VersionText" Text="v2.3" FontSize="12" Foreground="#888" Margin="6,0,0,2" VerticalAlignment="Bottom"/>
+                <TextBlock Text="WinKit" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                <TextBlock x:Name="VersionText" Text="v2.4" FontSize="12" Foreground="{DynamicResource ThemeTextSecondaryBrush}" Margin="6,0,0,2" VerticalAlignment="Bottom"/>
             </StackPanel>
 
             <!-- 信息表格 -->
@@ -41,13 +41,13 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="作者:" Foreground="#777" FontSize="12" HorizontalAlignment="Right"/>
-                <TextBlock Grid.Row="0" Grid.Column="2" Text="li5bo5" Foreground="#222" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="作者:" Foreground="{DynamicResource ThemeTextSecondaryBrush}" FontSize="12" HorizontalAlignment="Right"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="li5bo5" Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontSize="12" FontWeight="SemiBold"/>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="项目地址:" Foreground="#777" FontSize="12" HorizontalAlignment="Right"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="项目地址:" Foreground="{DynamicResource ThemeTextSecondaryBrush}" FontSize="12" HorizontalAlignment="Right"/>
                 <TextBlock Grid.Row="2" Grid.Column="2" x:Name="LinkText" 
                            Text="github.com/li5bo5/WinKit" 
-                           Foreground="#0066CC" 
+                           Foreground="#2A75D3" 
                            FontSize="12" 
                            Cursor="Hand" 
                            TextDecorations="Underline"
@@ -55,8 +55,8 @@
                            MouseLeave="LinkText_MouseLeave"
                            MouseLeftButtonDown="LinkText_MouseLeftButtonDown"/>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="开源协议:" Foreground="#777" FontSize="12" HorizontalAlignment="Right"/>
-                <TextBlock Grid.Row="4" Grid.Column="2" Text="AGPL-3.0" ToolTip="GNU Affero General Public License v3.0" Foreground="#222" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="开源协议:" Foreground="{DynamicResource ThemeTextSecondaryBrush}" FontSize="12" HorizontalAlignment="Right"/>
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="AGPL-3.0" ToolTip="GNU Affero General Public License v3.0" Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontSize="12" FontWeight="SemiBold"/>
             </Grid>
 
             <!-- 底部：版权与提示 -->
@@ -64,11 +64,11 @@
                 <TextBlock Text="© 2026 li5bo5. All Rights Reserved." 
                            HorizontalAlignment="Center" 
                            FontSize="10" 
-                           Foreground="#999"/>
+                           Foreground="{DynamicResource ThemeTextTertiaryBrush}"/>
                 <TextBlock Text="按 Esc 键关闭" 
                            HorizontalAlignment="Center" 
                            FontSize="9" 
-                           Foreground="#BBB" 
+                           Foreground="{DynamicResource ThemeTextTertiaryBrush}" 
                            Margin="0,4,0,0"/>
             </StackPanel>
         </Grid>

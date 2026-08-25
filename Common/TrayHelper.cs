@@ -148,7 +148,8 @@ namespace WinKit.Common
                 trayIcon = SystemIcons.Application;
             }
 
-            var version = asm.GetName().Version?.ToString(3) ?? "2.3.0";
+            var ver = asm.GetName().Version;
+            var version = ver != null ? $"{ver.Major}.{ver.Minor}" : "2.4";
 
             _icon = new SWF.NotifyIcon
             {

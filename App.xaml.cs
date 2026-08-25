@@ -24,8 +24,9 @@ namespace WinKit
         {
             base.OnStartup(e);
 
-            // 1. 初始化统一配置管理器
+            // 1. 初始化统一配置管理器与全局主题引擎
             _settingsManager = new SettingsManager();
+            ThemeManager.Initialize(_settingsManager);
 
             // 2. 初始化剪贴板监听和数据中心（常驻后台）
             _clipboardService = new ClipboardService();
@@ -134,6 +135,7 @@ namespace WinKit
         protected override void OnExit(ExitEventArgs e)
         {
             // 优雅释放所有非托管钩子和资源
+            ThemeManager.Dispose();
             _keyboardHookService?.Dispose();
             _clipboardService?.Dispose();
             _trayHelper?.Dispose();

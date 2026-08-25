@@ -12,7 +12,7 @@
         ShowInTaskbar="False"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
 
-    <!-- 与主窗口一致：圆角 + 统一半透明磨砂白色背景 -->
+    <!-- 与主窗口一致：圆角 + 动态半透明磨砂背景 -->
     <Border Style="{StaticResource FluentWindowBorder}">
         <StackPanel Margin="14,12">
 
@@ -23,11 +23,11 @@
                 <TextBlock Text="编辑待办"
                            FontSize="12"
                            FontWeight="SemiBold"
-                           Foreground="#555"
+                           Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                            VerticalAlignment="Center"/>
                 <TextBlock Text="双击/Enter 确认 · Esc 取消"
                            FontSize="10"
-                           Foreground="#999"
+                           Foreground="{DynamicResource ThemeTextSecondaryBrush}"
                            HorizontalAlignment="Right"
                            VerticalAlignment="Center"/>
             </Grid>

@@ -11,14 +11,33 @@
         <CornerRadius x:Key="Radius3">3</CornerRadius>
 
         <!-- ══════════════════════════════════════════════
+             默认主题画刷（动态资源兜底定义，运行时由 ThemeManager 动态覆写）
+        ══════════════════════════════════════════════ -->
+        <SolidColorBrush x:Key="ThemeWindowBackgroundBrush" Color="#E6F5F5F5"/>
+        <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#1A000000"/>
+        <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#222222"/>
+        <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#666666"/>
+        <SolidColorBrush x:Key="ThemeTextTertiaryBrush" Color="#999999"/>
+        <SolidColorBrush x:Key="ThemeTextPlaceholderBrush" Color="#88000000"/>
+        <SolidColorBrush x:Key="ThemeItemHoverBrush" Color="#14000000"/>
+        <SolidColorBrush x:Key="ThemeItemSelectedBrush" Color="#1F000000"/>
+        <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#CCCCCC"/>
+        <SolidColorBrush x:Key="ThemeCardBackgroundBrush" Color="#99FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeCardBorderBrush" Color="#15000000"/>
+        <SolidColorBrush x:Key="ThemeSeparatorBrush" Color="#18000000"/>
+        <SolidColorBrush x:Key="ThemeButtonHoverBrush" Color="#14000000"/>
+        <SolidColorBrush x:Key="ThemeButtonPressedBrush" Color="#24000000"/>
+        <SolidColorBrush x:Key="ThemeScrollBarThumbBrush" Color="#4D000000"/>
+
+        <!-- ══════════════════════════════════════════════
              细滚动条样式（4px宽，圆角滑块，自动隐藏）
-             【核心】：必须放在引用它的 MenuItem 和 ListView 样式前面被解析
         ══════════════════════════════════════════════ -->
         <Style x:Key="NarrowScrollBarThumb" TargetType="Thumb">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border Background="#4D000000"
+                        <Border Background="{DynamicResource ThemeScrollBarThumbBrush}"
                                 CornerRadius="{StaticResource Radius3}"
                                 Margin="1"/>
                     </ControlTemplate>
@@ -129,8 +148,8 @@
              WPF ContextMenu / MenuItem 现代 Fluent 隐式样式
         ══════════════════════════════════════════════ -->
         <Style TargetType="{x:Type ContextMenu}">
-            <Setter Property="Background" Value="#D9F5F5F5"/>
-            <Setter Property="BorderBrush" Value="#22000000"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeWindowBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeWindowBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="2,4"/>
             <Setter Property="Template">
@@ -142,7 +161,7 @@
                                 CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
                             <Border.Effect>
-                                <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.12" Color="Black"/>
+                                <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.15" Color="Black"/>
                             </Border.Effect>
                             <ItemsPresenter KeyboardNavigation.TabNavigation="Cycle"/>
                         </Border>
@@ -152,7 +171,7 @@
         </Style>
 
         <Style TargetType="{x:Type MenuItem}">
-            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI"/>
@@ -181,11 +200,11 @@
                                                   Margin="4,0"/>
                                 <Path x:Name="GlyphPanel" 
                                       Data="M 1,5 L 4,8 L 9,2" 
-                                      Stroke="#444" 
+                                      Stroke="{DynamicResource ThemeTextPrimaryBrush}" 
                                       StrokeThickness="1.5" 
                                       FlowDirection="LeftToRight"
                                       HorizontalAlignment="Center" 
-                                      VerticalAlignment="Center"
+                                      VerticalAlignment="Center" 
                                       Visibility="Collapsed"/>
 
                                 <ContentPresenter Grid.Column="1"
@@ -198,10 +217,10 @@
                                 <Path x:Name="RightArrow" 
                                       Grid.Column="3" 
                                       Data="M 0,0 L 4,4 L 0,8" 
-                                      Stroke="#666" 
-                                      StrokeThickness="1"
+                                      Stroke="{DynamicResource ThemeTextSecondaryBrush}" 
+                                      StrokeThickness="1" 
                                       HorizontalAlignment="Center" 
-                                      VerticalAlignment="Center"
+                                      VerticalAlignment="Center" 
                                       Visibility="Collapsed"/>
 
                                 <Popup x:Name="PART_Popup"
@@ -211,19 +230,16 @@
                                        Placement="Right"
                                        PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}">
                                     <Border x:Name="SubMenuBorder"
-                                            Background="#D9F5F5F5"
-                                            BorderBrush="#22000000"
+                                            Background="{DynamicResource ThemeWindowBackgroundBrush}"
+                                            BorderBrush="{DynamicResource ThemeWindowBorderBrush}"
                                             BorderThickness="1"
                                             CornerRadius="8"
                                             Padding="2,4">
                                         <Border.Effect>
-                                            <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.12" Color="Black"/>
+                                            <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.15" Color="Black"/>
                                         </Border.Effect>
                                         <ScrollViewer x:Name="SubMenuScrollViewer" Style="{StaticResource NarrowScrollViewer}">
                                             <Grid RenderOptions.ClearTypeHint="Enabled">
-                                                <Canvas Width="0" Height="0">
-                                                    <Rectangle x:Name="OpaqueRect" Fill="#F5F5F5" Width="{Binding ActualWidth, ElementName=SubMenuBorder}" Height="{Binding ActualHeight, ElementName=SubMenuBorder}"/>
-                                                </Canvas>
                                                 <ItemsPresenter x:Name="ItemsPresenter" KeyboardNavigation.TabNavigation="Cycle"/>
                                             </Grid>
                                         </ScrollViewer>
@@ -236,7 +252,7 @@
                                 <Setter TargetName="GlyphPanel" Property="Visibility" Value="Visible"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="templateRoot" Property="Background" Value="#14000000"/>
+                                <Setter TargetName="templateRoot" Property="Background" Value="{DynamicResource ThemeItemHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="HasItems" Value="True">
                                 <Setter TargetName="RightArrow" Property="Visibility" Value="Visible"/>
@@ -251,9 +267,11 @@
              标题栏按钮（置顶/最小化/关闭）
         ══════════════════════════════════════════════ -->
         <Style x:Key="TitleBarBtn" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
@@ -271,10 +289,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#12000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#24000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonPressedBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -286,9 +305,11 @@
              操作按钮（编辑/删除）— 默认隐藏，列表行 hover 时显示
         ══════════════════════════════════════════════ -->
         <Style x:Key="ActionBtn" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Width" Value="22"/>
             <Setter Property="Height" Value="22"/>
@@ -306,7 +327,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#12000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -318,13 +340,13 @@
              内联输入框（双击添加/搜索框）
         ══════════════════════════════════════════════ -->
         <Style x:Key="InlineTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="#A6FFFFFF"/>
-            <Setter Property="BorderBrush" Value="#1F000000"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#222"/>
-            <Setter Property="CaretBrush" Value="#555"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
@@ -344,7 +366,7 @@
                             <!-- 自定义的水印文字 -->
                             <TextBlock x:Name="watermark" 
                                        Text="{TemplateBinding Tag}" 
-                                       Foreground="#88000000" 
+                                       Foreground="{DynamicResource ThemeTextPlaceholderBrush}" 
                                        IsHitTestVisible="False"
                                        Margin="12,5"
                                        VerticalAlignment="Center"
@@ -358,13 +380,12 @@
                                 </MultiTrigger.Conditions>
                                 <Setter TargetName="watermark" Property="Visibility" Value="Visible"/>
                             </MultiTrigger>
-                              <Trigger Property="IsMouseOver" Value="True">
-                                  <Setter Property="Background" Value="#BFFFFFFF"/>
-                              </Trigger>
-                             <Trigger Property="IsFocused" Value="True">
-                                 <Setter Property="Background" Value="#F2FFFFFF"/>
-                                 <Setter Property="BorderBrush" Value="#44000000"/>
-                             </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="#2A5CB8"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -375,21 +396,21 @@
              统一设计系统：窗体外壳与卡片容器
         ══════════════════════════════════════════════ -->
         <Style x:Key="FluentWindowBorder" TargetType="Border">
-            <Setter Property="Background" Value="#E6F5F5F5"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeWindowBackgroundBrush}"/>
             <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="BorderBrush" Value="#1A000000"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeWindowBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Effect">
                 <Setter.Value>
-                    <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.12" Color="Black"/>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.18" Color="Black"/>
                 </Setter.Value>
             </Setter>
         </Style>
 
         <Style x:Key="PreferencesCard" TargetType="Border">
-            <Setter Property="Background" Value="#99FFFFFF"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeCardBackgroundBrush}"/>
             <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="BorderBrush" Value="#15000000"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="14,10"/>
             <Setter Property="Margin" Value="0,0,0,12"/>
@@ -425,26 +446,29 @@
         </Style>
 
         <Style x:Key="FluentSecondaryButton" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Height" Value="28"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bd"
                                 Background="Transparent"
-                                BorderBrush="#33000000"
+                                BorderBrush="{DynamicResource ThemeCardBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="5">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#12000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#20000000"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonPressedBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -453,14 +477,14 @@
         </Style>
 
         <!-- ══════════════════════════════════════════════
-             统一设计系统：半透明圆角 ComboBox（与 InlineTextBox 对齐）
+             统一设计系统：半透明圆角 ComboBox
         ══════════════════════════════════════════════ -->
         <Style x:Key="FluentComboBox" TargetType="ComboBox">
             <Setter Property="Height" Value="28"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#222"/>
-            <Setter Property="Background" Value="#A6FFFFFF"/>
-            <Setter Property="BorderBrush" Value="#1F000000"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,0,24,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -488,7 +512,7 @@
                                                 <!-- 右侧几何箭头 -->
                                                 <Path x:Name="Arrow"
                                                       Data="M 0,0 L 4,4 L 8,0"
-                                                      Stroke="#666"
+                                                      Stroke="{DynamicResource ThemeTextSecondaryBrush}"
                                                       StrokeThickness="1.5"
                                                       HorizontalAlignment="Right"
                                                       VerticalAlignment="Center"
@@ -497,11 +521,10 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="TemplateRoot" Property="Background" Value="#BFFFFFFF"/>
+                                                <Setter TargetName="TemplateRoot" Property="BorderBrush" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
                                             </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
-                                                <Setter TargetName="TemplateRoot" Property="Background" Value="#F2FFFFFF"/>
-                                                <Setter TargetName="TemplateRoot" Property="BorderBrush" Value="#44000000"/>
+                                                <Setter TargetName="TemplateRoot" Property="BorderBrush" Value="#2A5CB8"/>
                                                 <Setter TargetName="Arrow" Property="Data" Value="M 0,4 L 4,0 L 8,4"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
@@ -526,15 +549,15 @@
                                    Placement="Bottom"
                                    PopupAnimation="Slide">
                                 <Border x:Name="DropDownBorder"
-                                        Background="#E6F5F5F5"
-                                        BorderBrush="#22000000"
+                                        Background="{DynamicResource ThemeWindowBackgroundBrush}"
+                                        BorderBrush="{DynamicResource ThemeWindowBorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="8"
                                         MinWidth="{Binding ActualWidth, ElementName=ToggleButton}"
                                         MaxHeight="200"
                                         Margin="0,2,0,0">
                                     <Border.Effect>
-                                        <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" Color="Black"/>
+                                        <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.2" Color="Black"/>
                                     </Border.Effect>
                                     <ScrollViewer Style="{StaticResource NarrowScrollViewer}">
                                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" Margin="2,4"/>
@@ -550,7 +573,7 @@
         <Style TargetType="ComboBoxItem">
             <Setter Property="Height" Value="26"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -564,10 +587,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="itemBd" Property="Background" Value="#14000000"/>
+                                <Setter TargetName="itemBd" Property="Background" Value="{DynamicResource ThemeItemHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="itemBd" Property="Background" Value="#22000000"/>
+                                <Setter TargetName="itemBd" Property="Background" Value="{DynamicResource ThemeItemSelectedBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -576,11 +599,11 @@
         </Style>
 
         <!-- ══════════════════════════════════════════════
-             统一设计系统：精致微圆角 CheckBox（与 InlineTextBox 对齐）
+             统一设计系统：精致微圆角 CheckBox
         ══════════════════════════════════════════════ -->
         <Style x:Key="FluentCheckBox" TargetType="CheckBox">
             <Setter Property="FontSize" Value="12.5"/>
-            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -596,8 +619,8 @@
                             <Border x:Name="boxBd"
                                     Grid.Column="0"
                                     Width="18" Height="18"
-                                    Background="#A6FFFFFF"
-                                    BorderBrush="#1F000000"
+                                    Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                    BorderBrush="{DynamicResource ThemeInputBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="4"
                                     VerticalAlignment="Center">
@@ -619,8 +642,7 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="boxBd" Property="Background" Value="#BFFFFFFF"/>
-                                <Setter TargetName="boxBd" Property="BorderBrush" Value="#44000000"/>
+                                <Setter TargetName="boxBd" Property="BorderBrush" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="boxBd" Property="Background" Value="#2A5CB8"/>

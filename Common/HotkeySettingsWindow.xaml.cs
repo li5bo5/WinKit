@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using WinKit.Common;
 using WpfTextBox = System.Windows.Controls.TextBox;
+using Application = System.Windows.Application;
 
 namespace WinKit.Common
 {
@@ -18,6 +19,7 @@ namespace WinKit.Common
 
         // 当前正在捕获按键的输入框
         private WpfTextBox? _capturingBox = null;
+        private bool _isInitializing = false;
 
         // 用于通知 App 重新加载快捷键与配置的回调
         public event Action? HotkeysChanged;
@@ -35,24 +37,33 @@ namespace WinKit.Common
         // ══════════════════════════════════════════════
         private void LoadFromSettings()
         {
-            var s = _settingsManager.Settings;
+            _isInitializing = true;
+            try
+            {
+                var s = _settingsManager.Settings;
 
-            // 1. TodoList
-            HkTodoTop.Text = s.HotkeyTodoTopToggle;
-            HkSaveExit.Text = s.HotkeyTodoSaveAndExit;
-            ChkTrayDoubleClick.IsChecked = s.TrayDoubleClickTodoEnabled;
-            SelectComboByTag(CmbRetentionDays, s.RecycleBinRetentionDays, 1); // 默认 60 天
+                // 1. TodoList
+                HkTodoTop.Text = s.HotkeyTodoTopToggle;
+                HkSaveExit.Text = s.HotkeyTodoSaveAndExit;
+                ChkTrayDoubleClick.IsChecked = s.TrayDoubleClickTodoEnabled;
+                SelectComboByTag(CmbRetentionDays, s.RecycleBinRetentionDays, 1); // 默认 60 天
 
-            // 2. Clipboard
-            HkClipboard.Text = s.HotkeyClipboardToggle;
-            ChkPasteMonitoring.IsChecked = s.PasteEnableMonitoring;
-            ChkPasteDedup.IsChecked = s.PasteEnableTextDeduplication;
-            ChkPasteRememberScroll.IsChecked = s.PasteRememberScrollPosition;
-            SelectComboByTag(CmbPasteMaxItems, s.PasteMaxItems, 2); // 默认 300 条
+                // 2. Clipboard
+                HkClipboard.Text = s.HotkeyClipboardToggle;
+                ChkPasteMonitoring.IsChecked = s.PasteEnableMonitoring;
+                ChkPasteDedup.IsChecked = s.PasteEnableTextDeduplication;
+                ChkPasteRememberScroll.IsChecked = s.PasteRememberScrollPosition;
+                SelectComboByTag(CmbPasteMaxItems, s.PasteMaxItems, 2); // 默认 300 条
 
-            // 3. General
-            SelectComboByTag(CmbOpacity, s.WindowOpacity, 5); // 默认 100%
-            ChkAutoStart.IsChecked = AutoStartHelper.IsAutoStartEnabled();
+                // 3. General
+                SelectComboByStringTag(CmbThemeMode, s.ThemeMode ?? "System", 0); // 默认跟随系统
+                SelectComboByTag(CmbOpacity, s.WindowOpacity, 5); // 默认 100%
+                ChkAutoStart.IsChecked = AutoStartHelper.IsAutoStartEnabled();
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
         }
 
         private static void SelectComboByTag(System.Windows.Controls.ComboBox combo, int targetVal, int defaultIndex)
@@ -69,12 +80,52 @@ namespace WinKit.Common
             if (combo.Items.Count > defaultIndex) combo.SelectedIndex = defaultIndex;
         }
 
+        private static void SelectComboByStringTag(System.Windows.Controls.ComboBox combo, string targetTag, int defaultIndex)
+        {
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                if (combo.Items[i] is ComboBoxItem item &&
+                    string.Equals(item.Tag?.ToString(), targetTag, StringComparison.OrdinalIgnoreCase))
+                {
+                    combo.SelectedIndex = i;
+                    return;
+                }
+            }
+            if (combo.Items.Count > defaultIndex) combo.SelectedIndex = defaultIndex;
+        }
+
         private static void SetHookCapturing(bool capturing)
         {
             if (System.Windows.Application.Current is App app && app.KeyboardHookService != null)
             {
                 app.KeyboardHookService.IsCapturing = capturing;
             }
+        }
+
+        // ══════════════════════════════════════════════
+        // 主题模式与不透明度即时预览响应
+        // ══════════════════════════════════════════════
+        private void CmbThemeMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isInitializing) return;
+            ApplyLivePreview();
+        }
+
+        private void CmbOpacity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isInitializing) return;
+            ApplyLivePreview();
+        }
+
+        private void ApplyLivePreview()
+        {
+            string mode = (CmbThemeMode?.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "System";
+            int opacity = 100;
+            if (CmbOpacity?.SelectedItem is ComboBoxItem opItem && int.TryParse(opItem.Tag?.ToString(), out int val))
+            {
+                opacity = val;
+            }
+            ThemeManager.ApplyTheme(mode, opacity);
         }
 
         // ══════════════════════════════════════════════
@@ -99,7 +150,7 @@ namespace WinKit.Common
                 {
                     LoadFromSettings();
                 }
-                tb.Foreground = System.Windows.Media.Brushes.Black;
+                tb.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ThemeTextPrimaryBrush"];
                 _capturingBox = null;
                 SetHookCapturing(false);
             }
@@ -128,7 +179,7 @@ namespace WinKit.Common
             if (key == Key.Escape)
             {
                 LoadFromSettings();
-                _capturingBox.Foreground = System.Windows.Media.Brushes.Black;
+                _capturingBox.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ThemeTextPrimaryBrush"];
                 Keyboard.ClearFocus();
                 _capturingBox = null;
                 SetHookCapturing(false);
@@ -143,7 +194,7 @@ namespace WinKit.Common
             sb.Append(KeyToString(key));
 
             _capturingBox.Text = sb.ToString();
-            _capturingBox.Foreground = System.Windows.Media.Brushes.Black;
+            _capturingBox.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ThemeTextPrimaryBrush"];
             Keyboard.ClearFocus();
             _capturingBox = null;
             SetHookCapturing(false);
@@ -192,7 +243,7 @@ namespace WinKit.Common
 
             if (e.Key == Key.Escape)
             {
-                Hide();
+                CancelAndClose();
                 e.Handled = true;
             }
         }
@@ -228,6 +279,11 @@ namespace WinKit.Common
             }
 
             // 3. General
+            if (CmbThemeMode.SelectedItem is ComboBoxItem themeItem)
+            {
+                settings.ThemeMode = themeItem.Tag?.ToString() ?? "System";
+            }
+
             if (CmbOpacity.SelectedItem is ComboBoxItem opItem &&
                 int.TryParse(opItem.Tag?.ToString(), out int opVal))
             {
@@ -237,6 +293,7 @@ namespace WinKit.Common
             AutoStartHelper.SetAutoStart(ChkAutoStart.IsChecked ?? true);
 
             _settingsManager.SaveSettings(settings);
+            ThemeManager.ApplyTheme(); // 确认持久化应用主题
 
             HotkeysChanged?.Invoke();
             Hide();
@@ -260,13 +317,22 @@ namespace WinKit.Common
             settings.PasteEnableTextDeduplication  = true;
             settings.PasteRememberScrollPosition   = false;
             settings.PasteMaxItems                 = 300;
+            settings.ThemeMode                     = "System";
             settings.WindowOpacity                 = 100;
 
             _settingsManager.SaveSettings(settings);
             AutoStartHelper.SetAutoStart(true);
 
             LoadFromSettings();
+            ThemeManager.ApplyTheme(); // 恢复默认主题
             HotkeysChanged?.Invoke();
+        }
+
+        private void CancelAndClose()
+        {
+            // 恢复已保存的配置主题（取消未保存的临时预览）
+            ThemeManager.ApplyTheme();
+            Hide();
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -274,6 +340,6 @@ namespace WinKit.Common
             if (e.ClickCount == 1) DragMove();
         }
 
-        private void CloseBtn_Click(object sender, RoutedEventArgs e) => Hide();
+        private void CloseBtn_Click(object sender, RoutedEventArgs e) => CancelAndClose();
     }
 }

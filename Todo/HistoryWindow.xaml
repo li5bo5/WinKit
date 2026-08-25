@@ -32,7 +32,7 @@
                            Margin="16,0"
                            FontSize="13.5"
                            FontWeight="SemiBold"
-                           Foreground="#222"/>
+                           Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
 
                 <Button x:Name="CloseBtn"
                         Content="✕"
@@ -48,7 +48,7 @@
 
             <!-- 2. 统计与提示栏 -->
             <Grid Grid.Row="1" Margin="16,2,16,6">
-                <TextBlock x:Name="CountText" Text="0 条记录" FontSize="11" Foreground="#888" VerticalAlignment="Center"/>
+                <TextBlock x:Name="CountText" Text="0 条记录" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}" VerticalAlignment="Center"/>
             </Grid>
 
             <!-- 3. 内容列表区 -->
@@ -57,7 +57,7 @@
                 <TextBlock x:Name="EmptyPlaceholder"
                            Text="暂无已删除的待办历史"
                            FontSize="12"
-                           Foreground="#88000000"
+                           Foreground="{DynamicResource ThemeTextPlaceholderBrush}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Visibility="Collapsed"/>
@@ -87,8 +87,8 @@
 
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="#99FFFFFF"
-                                    BorderBrush="#15000000"
+                            <Border Background="{DynamicResource ThemeCardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource ThemeCardBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="6"
                                     Padding="10,6">
@@ -103,7 +103,7 @@
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
                                         <TextBlock Text="{Binding Title}"
                                                    FontSize="12.5"
-                                                   Foreground="#222"
+                                                   Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                                    TextWrapping="Wrap"
                                                    LineHeight="16"
                                                    LineStackingStrategy="BlockLineHeight"
@@ -111,7 +111,7 @@
                                                    TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding FormattedTime}"
                                                    FontSize="10"
-                                                   Foreground="#888"
+                                                   Foreground="{DynamicResource ThemeTextSecondaryBrush}"
                                                    Margin="0,3,0,0"/>
                                     </StackPanel>
 
@@ -145,7 +145,7 @@
             </Grid>
 
             <!-- 4. 底部栏：清空历史 -->
-            <Border Grid.Row="3" BorderBrush="#15000000" BorderThickness="0,1,0,0">
+            <Border Grid.Row="3" BorderBrush="{DynamicResource ThemeCardBorderBrush}" BorderThickness="0,1,0,0">
                 <Grid Margin="16,0">
                     <Button x:Name="ClearAllBtn"
                             Content="清空历史"
@@ -167,8 +167,8 @@
                         MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
                         ToolTip="拖动调整大小">
                     <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                        <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
-                        <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                        <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                        <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
                     </Canvas>
                 </Border>
             </Grid>

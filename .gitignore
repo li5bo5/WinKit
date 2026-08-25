@@ -1,35 +1,70 @@
-## ── 参考代码、设计与文档忽略 ──────────────────────────
-/MiniPaste/
-/PinToD/
+## ── WinKit 项目专属与内部文档 (Project Specific & Docs) ──────
 /开发文档/
+/Publish_Releases/
 
-## ── .NET / Visual Studio 忽略 ────────────────────────
-[Ob]bj/
+## ── 本地数据、用户配置与日志 (Local Data, Settings & Logs) ─
+/Data/
+settings.json
+todos.md
+*.jsonl
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.log
+
+## ── 构建产物与编译输出 (Build Results & Artifacts) ─────────
 [Bb]in/
+[Oo]bj/
+[Aa]pp[Pp]ackages/
+BundleArtifacts/
+_ReSharper*/
+Generated Files/
+
+## ── Visual Studio / MSBuild 临时文件与缓存 ────────────────
 .vs/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
+*.sln.DotSettings.user
+*.suo.template
+*.userprefs
+*.pidb
+*.booproj
 
-# 平台与打包
-/bin/
-/obj/
-/AppPackages/
-/BundleArtifacts/
+## ── 其他现代 IDE 与编辑器配置 (VS Code / JetBrains Rider) ──
+.vscode/
+.idea/
+*.DotSettings.user
 
-# 数据库与本地用户配置
-*.db
-*.db-shm
-*.db-wal
-settings.json
-todos.md
+## ── NuGet 包与依赖缓存 (NuGet Packages & Cache) ────────────
+*.nupkg
+*.snupkg
+**/packages/
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
 
-# 操作系统临时文件
+## ── 测试与分析产物 (Test Results & Coverage) ───────────────
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+## ── 操作系统临时文件与崩溃转储 (OS & Crash Dumps) ─────────
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
-# 发布构建输出
-/Publish_Releases/
+*.lnk
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+*.dmp
+*.dump
+*.crash

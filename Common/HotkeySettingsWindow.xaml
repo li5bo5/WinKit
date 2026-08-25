@@ -1,7 +1,7 @@
 <Window x:Class="WinKit.Common.HotkeySettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="偏好设置" Width="350" Height="530"
+        Title="偏好设置" Width="360" Height="560"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -26,7 +26,7 @@
                            Margin="16,0"
                            FontSize="13.5"
                            FontWeight="SemiBold"
-                           Foreground="#222"/>
+                           Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
                 <Button Content="✕"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
@@ -43,13 +43,13 @@
 
                     <!-- 说明文字 -->
                     <TextBlock Text="点击快捷键输入框可直接按下目标物理按键进行录入。"
-                               FontSize="11" Foreground="#888"
+                               FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"
                                Margin="2,0,0,8"/>
 
                     <!-- ══════════════════════════════════════════
                          分组 1：待办清单 (TodoList)
                     ══════════════════════════════════════════ -->
-                    <TextBlock Text="待办清单 (TodoList)" FontSize="12" FontWeight="SemiBold" Foreground="#444" Margin="2,0,0,6"/>
+                    <TextBlock Text="待办清单 (TodoList)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,0,0,6"/>
                     <Border Style="{StaticResource PreferencesCard}">
                         <StackPanel>
                             <!-- 置顶显示快捷键 -->
@@ -59,8 +59,8 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="置顶显示快捷键" FontSize="12" Foreground="#222"/>
-                                    <TextBlock Text="默认：Ctrl + D" FontSize="10" Foreground="#999"/>
+                                    <TextBlock Text="置顶显示快捷键" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="默认：Ctrl + D" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBox x:Name="HkTodoTop" Grid.Column="1"
                                          Style="{StaticResource InlineTextBox}"
@@ -73,7 +73,7 @@
                                          ToolTip="点击此处，然后按下目标快捷键"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 保存并退出编辑快捷键 -->
                             <Grid Margin="0,3">
@@ -82,8 +82,8 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="保存退出编辑快捷键" FontSize="12" Foreground="#222"/>
-                                    <TextBlock Text="默认：Ctrl + S" FontSize="10" Foreground="#999"/>
+                                    <TextBlock Text="保存退出编辑快捷键" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="默认：Ctrl + S" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBox x:Name="HkSaveExit" Grid.Column="1"
                                          Style="{StaticResource InlineTextBox}"
@@ -96,7 +96,7 @@
                                          ToolTip="点击此处，然后按下目标快捷键"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 双击托盘唤出 TodoList -->
                             <Grid Margin="0,3">
@@ -105,14 +105,14 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="双击托盘唤出待办清单" FontSize="12" Foreground="#222"/>
-                                    <TextBlock Text="双击托盘图标切换置顶显示或隐藏" FontSize="10" Foreground="#999"/>
+                                    <TextBlock Text="双击托盘唤出待办清单" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="双击托盘图标切换置顶显示或隐藏" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkTrayDoubleClick" Grid.Column="1"
                                           Style="{StaticResource FluentCheckBox}"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 待办历史保留天数 -->
                             <Grid Margin="0,3">
@@ -121,8 +121,8 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="历史记录保留天数" FontSize="12" Foreground="#222"/>
-                                    <TextBlock Text="超时自动清理" FontSize="10" Foreground="#999"/>
+                                    <TextBlock Text="历史记录保留天数" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="超时自动清理" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <ComboBox x:Name="CmbRetentionDays" Grid.Column="1"
                                           Style="{StaticResource FluentComboBox}">
@@ -138,7 +138,7 @@
                     <!-- ══════════════════════════════════════════
                          分组 2：剪贴板 (Clipboard)
                     ══════════════════════════════════════════ -->
-                    <TextBlock Text="剪贴板 (Clipboard)" FontSize="12" FontWeight="SemiBold" Foreground="#444" Margin="2,2,0,6"/>
+                    <TextBlock Text="剪贴板 (Clipboard)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,2,0,6"/>
                     <Border Style="{StaticResource PreferencesCard}">
                         <StackPanel>
                             <!-- 唤出剪贴板快捷键 -->
@@ -148,8 +148,8 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="唤出剪贴板快捷键" FontSize="12" Foreground="#222"/>
-                                    <TextBlock Text="默认：Win + V" FontSize="10" Foreground="#999"/>
+                                    <TextBlock Text="唤出剪贴板快捷键" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="默认：Win + V" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBox x:Name="HkClipboard" Grid.Column="1"
                                          Style="{StaticResource InlineTextBox}"
@@ -162,7 +162,7 @@
                                          ToolTip="点击此处，然后按下目标快捷键"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 启用剪贴板监控 -->
                             <Grid Margin="0,3">
@@ -170,12 +170,12 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="启用剪贴板监听与记录" FontSize="12" Foreground="#222" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="启用剪贴板监听与记录" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}" VerticalAlignment="Center"/>
                                 <CheckBox x:Name="ChkPasteMonitoring" Grid.Column="1"
                                           Style="{StaticResource FluentCheckBox}"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 启用历史文本去重 -->
                             <Grid Margin="0,3">
@@ -183,12 +183,12 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="启用历史文本自动去重" FontSize="12" Foreground="#222" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="启用历史文本自动去重" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}" VerticalAlignment="Center"/>
                                 <CheckBox x:Name="ChkPasteDedup" Grid.Column="1"
                                           Style="{StaticResource FluentCheckBox}"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 记忆列表滚动位置 -->
                             <Grid Margin="0,3">
@@ -196,12 +196,12 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="记忆剪贴板列表滚动位置" FontSize="12" Foreground="#222" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="记忆剪贴板列表滚动位置" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}" VerticalAlignment="Center"/>
                                 <CheckBox x:Name="ChkPasteRememberScroll" Grid.Column="1"
                                           Style="{StaticResource FluentCheckBox}"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 剪贴板历史保留条数 -->
                             <Grid Margin="0,3">
@@ -210,8 +210,8 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="历史记录保留条数" FontSize="12" Foreground="#222"/>
-                                    <TextBlock Text="超限自动折半清理" FontSize="10" Foreground="#999"/>
+                                    <TextBlock Text="历史记录保留条数" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="超限自动折半清理" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <ComboBox x:Name="CmbPasteMaxItems" Grid.Column="1"
                                           Style="{StaticResource FluentComboBox}">
@@ -228,18 +228,40 @@
                     <!-- ══════════════════════════════════════════
                          分组 3：常规与外观 (General)
                     ══════════════════════════════════════════ -->
-                    <TextBlock Text="常规与外观 (General)" FontSize="12" FontWeight="SemiBold" Foreground="#444" Margin="2,2,0,6"/>
+                    <TextBlock Text="常规与外观 (General)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,2,0,6"/>
                     <Border Style="{StaticResource PreferencesCard}">
                         <StackPanel>
+                            <!-- 颜色主题模式 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="颜色主题" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="跟随系统 / 浅色 / 深色" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <ComboBox x:Name="CmbThemeMode" Grid.Column="1"
+                                          Style="{StaticResource FluentComboBox}"
+                                          SelectionChanged="CmbThemeMode_SelectionChanged">
+                                    <ComboBoxItem Content="跟随系统 (默认)" Tag="System"/>
+                                    <ComboBoxItem Content="浅色" Tag="Light"/>
+                                    <ComboBoxItem Content="深色" Tag="Dark"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
+
                             <!-- 窗口不透明度 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="145"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="窗口不透明度" FontSize="12" Foreground="#222" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="窗口不透明度" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}" VerticalAlignment="Center"/>
                                 <ComboBox x:Name="CmbOpacity" Grid.Column="1"
-                                          Style="{StaticResource FluentComboBox}">
+                                          Style="{StaticResource FluentComboBox}"
+                                          SelectionChanged="CmbOpacity_SelectionChanged">
                                     <ComboBoxItem Content="40%" Tag="40"/>
                                     <ComboBoxItem Content="60%" Tag="60"/>
                                     <ComboBoxItem Content="70%" Tag="70"/>
@@ -249,7 +271,7 @@
                                 </ComboBox>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="#12000000"/>
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
                             <!-- 开机自动启动 -->
                             <Grid Margin="0,3">
@@ -257,7 +279,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="开机时自动启动 WinKit" FontSize="12" Foreground="#222" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="开机时自动启动 WinKit" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}" VerticalAlignment="Center"/>
                                 <CheckBox x:Name="ChkAutoStart" Grid.Column="1"
                                           Style="{StaticResource FluentCheckBox}"/>
                             </Grid>
@@ -268,7 +290,7 @@
             </ScrollViewer>
 
             <!-- 底部操作按钮栏 -->
-            <Border Grid.Row="2" BorderBrush="#15000000" BorderThickness="0,1,0,0">
+            <Border Grid.Row="2" BorderBrush="{DynamicResource ThemeCardBorderBrush}" BorderThickness="0,1,0,0">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
                             VerticalAlignment="Center" Margin="0,0,16,0">
 
