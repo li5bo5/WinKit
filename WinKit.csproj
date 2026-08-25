@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WinKit</AssemblyName>
     <RootNamespace>WinKit</RootNamespace>
-    <Version>2.3.0</Version>
+    <Version>2.4</Version>
     <Authors>li5bo5</Authors>
     <Company>li5bo5</Company>
     <Product>WinKit</Product>

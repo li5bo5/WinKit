@@ -9,11 +9,11 @@ namespace WinKit.Common
     public static class AppPaths
     {
         /// <summary>
-        /// 应用程序数据目录（%APPDATA%/WinKit）
+        /// 应用程序数据目录（应用程序所在目录下的 Data 文件夹，绿色便携）
         /// </summary>
         public static readonly string AppData = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "WinKit");
+            AppDomain.CurrentDomain.BaseDirectory,
+            "Data");
 
         /// <summary>
         /// 待办事项明文保存路径 (todos.jsonl)

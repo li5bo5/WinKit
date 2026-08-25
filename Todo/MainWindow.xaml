@@ -13,7 +13,7 @@
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
         ResizeMode="NoResize">
 
-    <!-- 主容器：圆角边框 + 统一磨砂白色背景 -->
+    <!-- 主容器：圆角边框 + 动态主题磨砂背景 -->
     <Border x:Name="RootBorder"
             Style="{StaticResource FluentWindowBorder}">
         <Grid>
@@ -36,7 +36,7 @@
                            Margin="16,0"
                            FontSize="13.5"
                            FontWeight="SemiBold"
-                           Foreground="#222"/>
+                           Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
 
                 <!-- 右侧按钮组：置顶 | 穿透 | 关闭 -->
                 <StackPanel x:Name="TitleButtons"
@@ -118,7 +118,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="itemBd" Property="Background" Value="#14000000"/>
+                                                    <Setter TargetName="itemBd" Property="Background" Value="{DynamicResource ThemeItemHoverBrush}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -140,7 +140,7 @@
                                     <!-- 左侧圆点标识，多行时顶部对齐 -->
                                     <Ellipse Grid.Column="0"
                                              Width="6" Height="6"
-                                             Fill="#88888888"
+                                             Fill="{DynamicResource ThemeTextTertiaryBrush}"
                                              VerticalAlignment="Top"
                                              Margin="0,5,8,0"/>
 
@@ -148,7 +148,7 @@
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding Title}"
                                                FontSize="13"
-                                               Foreground="#222"
+                                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                                TextWrapping="Wrap"
                                                TextTrimming="CharacterEllipsis"
                                                LineHeight="18"
@@ -193,7 +193,7 @@
                                Text="暂无代办"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               Foreground="#88000000"
+                               Foreground="{DynamicResource ThemeTextPlaceholderBrush}"
                                FontSize="13"
                                Visibility="Collapsed"
                                IsHitTestVisible="False"/>
@@ -224,9 +224,9 @@
                             MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
                             ToolTip="拖动调整大小">
                         <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                            <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
-                            <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
-                            <Line X1="10" Y1="10" X2="10" Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                            <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                            <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                            <Line X1="10" Y1="10" X2="10" Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
                         </Canvas>
                     </Border>
                 </Grid>

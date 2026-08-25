@@ -16,6 +16,8 @@ namespace WinKit.Common
         public int RecycleBinRetentionDays { get; set; } = 60;
 
         // ── 常规与外观设置 ──────────────────────────────
+        /// <summary>颜色主题模式：System(跟随系统，默认), Light(浅色), Dark(深色)</summary>
+        public string ThemeMode { get; set; } = "System";
         /// <summary>窗口不透明度（40 ~ 100）</summary>
         public int WindowOpacity { get; set; } = 100; // 默认 100%
         /// <summary>开机自动启动</summary>

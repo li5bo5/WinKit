@@ -12,7 +12,7 @@
         WindowStartupLocation="Manual"
         ResizeMode="NoResize">
 
-    <!-- 主容器：圆角边框 + 统一磨砂白色背景 -->
+    <!-- 主容器：圆角边框 + 动态主题磨砂背景 -->
     <Border x:Name="RootBorder"
             Style="{StaticResource FluentWindowBorder}">
         <Grid>
@@ -36,7 +36,7 @@
                            Margin="16,0"
                            FontSize="13.5"
                            FontWeight="SemiBold"
-                           Foreground="#222"/>
+                           Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
 
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Right"
@@ -100,10 +100,10 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="itemBd" Property="Background" Value="#14000000"/>
+                                                <Setter TargetName="itemBd" Property="Background" Value="{DynamicResource ThemeItemHoverBrush}"/>
                                             </Trigger>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="itemBd" Property="Background" Value="#1A000000"/>
+                                                <Setter TargetName="itemBd" Property="Background" Value="{DynamicResource ThemeItemSelectedBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -124,7 +124,7 @@
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding DisplayText}"
                                            FontSize="12.5"
-                                           Foreground="#222"
+                                           Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                            TextWrapping="Wrap"
                                            TextTrimming="CharacterEllipsis"
                                            LineHeight="18"
@@ -159,7 +159,7 @@
                            Text="剪贴板历史为空"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Foreground="#88000000"
+                           Foreground="{DynamicResource ThemeTextPlaceholderBrush}"
                            FontSize="13"
                            Visibility="Collapsed"
                            IsHitTestVisible="False"/>
@@ -179,10 +179,13 @@
                         Click="ClearAllButton_Click">
                     <Button.Style>
                         <Style TargetType="Button">
+                            <Setter Property="Focusable" Value="False"/>
+                            <Setter Property="IsTabStop" Value="False"/>
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                             <Setter Property="Background" Value="Transparent"/>
                             <Setter Property="BorderThickness" Value="1"/>
-                            <Setter Property="BorderBrush" Value="#44000000"/>
-                            <Setter Property="Foreground" Value="#444"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
@@ -194,7 +197,8 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#14000000"/>
+                                                <Setter Property="Background" Value="{DynamicResource ThemeButtonHoverBrush}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -205,7 +209,7 @@
                 </Button>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <TextBlock x:Name="CountText" Text="0 项" FontSize="11" Foreground="#666"/>
+                    <TextBlock x:Name="CountText" Text="0 项" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                 </StackPanel>
             </Grid>
 
@@ -219,8 +223,8 @@
                         MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
                         ToolTip="拖动调整大小">
                     <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                        <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
-                        <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="#88888888" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                        <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                        <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
                     </Canvas>
                 </Border>
             </Grid>
