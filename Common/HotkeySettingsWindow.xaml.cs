@@ -31,6 +31,13 @@ namespace WinKit.Common
             _settingsManager = settingsManager;
 
             LoadFromSettings();
+            IsVisibleChanged += (s, e) =>
+            {
+                if (IsVisible)
+                {
+                    LoadFromSettings();
+                }
+            };
         }
 
         // ══════════════════════════════════════════════
@@ -47,6 +54,7 @@ namespace WinKit.Common
                 HkTodoTop.Text = s.HotkeyTodoTopToggle;
                 HkSaveExit.Text = s.HotkeyTodoSaveAndExit;
                 ChkTodoExpandedDisplay.IsChecked = s.TodoExpandedDisplay;
+                ChkTodoPassThrough.IsChecked = s.TodoIsPassThrough;
                 ChkTrayDoubleClick.IsChecked = s.TrayDoubleClickTodoEnabled;
                 SelectComboByTag(CmbRetentionDays, s.RecycleBinRetentionDays, 1); // 默认 60 天
 
@@ -263,6 +271,7 @@ namespace WinKit.Common
             settings.HotkeyTodoTopToggle        = HkTodoTop.Text.Trim();
             settings.HotkeyTodoSaveAndExit      = HkSaveExit.Text.Trim();
             settings.TodoExpandedDisplay        = ChkTodoExpandedDisplay.IsChecked ?? false;
+            settings.TodoIsPassThrough          = ChkTodoPassThrough.IsChecked ?? false;
             settings.TrayDoubleClickTodoEnabled = ChkTrayDoubleClick.IsChecked ?? true;
 
             if (CmbRetentionDays.SelectedItem is ComboBoxItem retItem &&

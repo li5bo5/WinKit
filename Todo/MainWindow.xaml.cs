@@ -46,7 +46,6 @@ namespace WinKit.Todo
         // 置顶 / 穿透（独立状态）
         private bool _isPinned      = false;
         private bool _isPassThrough = false;
-        private System.Windows.Threading.DispatcherTimer? _passThroughTimer;
 
         // 托盘引用（用于同步状态）
         private TrayHelper? _tray;
@@ -124,6 +123,24 @@ namespace WinKit.Todo
 
             // 载入并应用保存的设置
             LoadSettings();
+
+            // 监听统一偏好设置变更广播
+            _settingsManager.SettingsChanged += (s, settings) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (_isPassThrough != settings.TodoIsPassThrough)
+                    {
+                        ApplyPassThroughState(settings.TodoIsPassThrough);
+                    }
+                    if (_isPinned != settings.TodoIsPinned)
+                    {
+                        _isPinned = settings.TodoIsPinned;
+                        this.Topmost = _isPinned;
+                        UpdatePinButton();
+                    }
+                });
+            };
 
             // 初始化占位符状态
             UpdateEmptyPlaceholder();
@@ -281,67 +298,31 @@ namespace WinKit.Todo
         private void TogglePassThroughState()
         {
             _isPassThrough = !_isPassThrough;
-
-            if (_isPassThrough)
-            {
-                PassThroughBtn.Content = "◉";
-                ResizeGripArea.Opacity = 0;
-                
-                StartPassThroughTimer();
-            }
-            else
-            {
-                PassThroughBtn.Content = "⊙";
-                
-                StopPassThroughTimer();
-                
-                var hwnd = new WindowInteropHelper(this).Handle;
-                int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
-            }
+            ApplyPassThroughState(_isPassThrough);
             SaveSettings();
         }
 
-        private void StartPassThroughTimer()
+        private void ApplyPassThroughState(bool isPassThrough)
         {
-            if (_passThroughTimer == null)
+            _isPassThrough = isPassThrough;
+            PassThroughBtn.Content = _isPassThrough ? "◉" : "⊙";
+            if (_isPassThrough)
             {
-                _passThroughTimer = new System.Windows.Threading.DispatcherTimer();
-                _passThroughTimer.Interval = TimeSpan.FromMilliseconds(50);
-                _passThroughTimer.Tick += PassThroughTimer_Tick;
+                ResizeGripArea.Opacity = 0;
             }
-            _passThroughTimer.Start();
-        }
-
-        private void StopPassThroughTimer()
-        {
-            _passThroughTimer?.Stop();
-        }
-
-        private void PassThroughTimer_Tick(object? sender, EventArgs e)
-        {
-            if (!_isPassThrough) return;
-
-            POINT mousePos;
-            GetCursorPos(out mousePos);
-
-            bool isOverButton = IsOverInteractiveButton((short)mousePos.X, (short)mousePos.Y);
 
             var hwnd = new WindowInteropHelper(this).Handle;
-            int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-
-            if (isOverButton)
+            if (hwnd != IntPtr.Zero)
             {
-                if ((extendedStyle & WS_EX_TRANSPARENT) != 0)
+                int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                if (_isPassThrough)
+                {
+                    SetTitleButtonsOpacity(0);
+                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT);
+                }
+                else
                 {
                     SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
-                }
-            }
-            else
-            {
-                if ((extendedStyle & WS_EX_TRANSPARENT) == 0)
-                {
-                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT);
                 }
             }
         }
@@ -672,47 +653,6 @@ namespace WinKit.Todo
             if (oldIdx >= 0 && newIdx >= 0) { _items.Move(oldIdx, newIdx); _todoService.SaveTodos(_items); }
         }
 
-        // ══════════════════════════════════════════════
-        // 按钮物理像素命中测试
-        // ══════════════════════════════════════════════
-        private bool IsOverInteractiveButton(short screenX, short screenY)
-        {
-            try
-            {
-                return IsScreenPointInElement(PinBtn, screenX, screenY) ||
-                       IsScreenPointInElement(PassThroughBtn, screenX, screenY) ||
-                       IsScreenPointInElement(CloseBtn, screenX, screenY);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private bool IsScreenPointInElement(System.Windows.UIElement element, short screenX, short screenY)
-        {
-            if (element == null || !element.IsVisible || element.Opacity == 0)
-                return false;
-
-            try
-            {
-                var ptScreen = element.PointToScreen(new System.Windows.Point(0, 0));
-                var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(element);
-
-                double left = ptScreen.X;
-                double top = ptScreen.Y;
-                double right = left + element.RenderSize.Width * dpi.DpiScaleX;
-                double bottom = top + element.RenderSize.Height * dpi.DpiScaleY;
-
-                return screenX >= left && screenX <= right &&
-                       screenY >= top && screenY <= bottom;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         private void LoadSettings()
         {
             var settings = _settingsManager.Settings;
@@ -724,16 +664,7 @@ namespace WinKit.Todo
             UpdatePinButton();
 
             // 应用穿透状态
-            if (_isPassThrough)
-            {
-                PassThroughBtn.Content = "◉";
-                StartPassThroughTimer();
-            }
-            else
-            {
-                PassThroughBtn.Content = "⊙";
-                StopPassThroughTimer();
-            }
+            ApplyPassThroughState(_isPassThrough);
         }
 
         private void SaveSettings()
@@ -774,13 +705,7 @@ namespace WinKit.Todo
                 // 取消穿透（若处于穿透状态）
                 if (_isPassThrough)
                 {
-                    _isPassThrough = false;
-                    PassThroughBtn.Content = "⊙";
-                    StopPassThroughTimer();
-
-                    var hwnd = new WindowInteropHelper(this).Handle;
-                    int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
+                    ApplyPassThroughState(false);
                 }
             }
 
