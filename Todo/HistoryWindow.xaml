@@ -40,10 +40,8 @@
                         VerticalAlignment="Center"
                         Margin="0,0,10,0"
                         Width="26" Height="26"
-                        Style="{StaticResource TitleBarBtn}"
-                        Opacity="1"
-                        Click="CloseBtn_Click"
-                        ToolTip="关闭"/>
+                        Style="{StaticResource WinKitGlassCloseButton}"
+                        Click="CloseBtn_Click"/>
             </Grid>
 
             <!-- 2. 统计与提示栏 -->
@@ -66,9 +64,15 @@
                 <ListBox x:Name="HistoryList"
                          Background="Transparent"
                          BorderThickness="0"
-                         Style="{StaticResource {x:Type ListBox}}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <ScrollViewer Style="{StaticResource NarrowScrollViewer}" Focusable="False">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ListBox.Template>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -93,52 +97,44 @@
                                     CornerRadius="6"
                                     Padding="10,6">
                                 <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- 待办标题 + 删除时间 -->
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                    <!-- 1. 底层：标题与时间，占满 100% 宽度 -->
+                                    <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Title}"
-                                                   FontSize="12.5"
-                                                   Foreground="{DynamicResource ThemeTextPrimaryBrush}"
-                                                   TextWrapping="Wrap"
-                                                   LineHeight="16"
-                                                   LineStackingStrategy="BlockLineHeight"
-                                                   MaxHeight="50"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                                   Style="{DynamicResource TodoItemTextBlockStyle}"/>
                                         <TextBlock Text="{Binding FormattedTime}"
                                                    FontSize="10"
                                                    Foreground="{DynamicResource ThemeTextSecondaryBrush}"
                                                    Margin="0,3,0,0"/>
                                     </StackPanel>
 
-                                    <!-- 还原按钮（图标化 + ToolTip） -->
-                                    <Button Grid.Column="1"
-                                            Content="⟲"
-                                            Style="{StaticResource ActionBtn}"
-                                            Width="22" Height="22"
-                                            FontSize="13"
-                                            VerticalAlignment="Center"
-                                            Margin="0,0,4,0"
-                                            Tag="{Binding}"
-                                            Click="RestoreBtn_Click"
-                                            ToolTip="还原至待办列表"/>
+                                    <!-- 2. 顶层：右侧重叠透明悬浮按钮层 (悬停时平滑浮现) -->
+                                    <StackPanel x:Name="OverlayActions"
+                                                Orientation="Horizontal"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Panel.ZIndex="10"
+                                                Opacity="0"
+                                                Margin="0,0,2,0">
+                                        <!-- 还原按钮 -->
+                                        <Button Content="⟲"
+                                                Style="{StaticResource ActionBtn}"
+                                                Tag="{Binding}"
+                                                Click="RestoreBtn_Click"/>
 
-                                    <!-- 彻底删除按钮 -->
-                                    <Button Grid.Column="2"
-                                            Content="✕"
-                                            Style="{StaticResource ActionBtn}"
-                                            Width="22" Height="22"
-                                            FontSize="11"
-                                            VerticalAlignment="Center"
-                                            Tag="{Binding}"
-                                            Click="DeleteBtn_Click"
-                                            ToolTip="彻底删除"/>
+                                        <!-- 彻底删除按钮 -->
+                                        <Button Content="✕"
+                                                Style="{StaticResource ActionBtn}"
+                                                Tag="{Binding}"
+                                                Click="DeleteBtn_Click"/>
+                                    </StackPanel>
                                 </Grid>
                             </Border>
+
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter TargetName="OverlayActions" Property="Opacity" Value="1"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -152,6 +148,7 @@
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             Width="80"
+                            Height="26"
                             Style="{StaticResource FluentSecondaryButton}"
                             Click="ClearAllBtn_Click"/>
                 </Grid>
@@ -164,8 +161,7 @@
                         Background="Transparent"
                         Cursor="SizeNWSE"
                         Opacity="0.4"
-                        MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
-                        ToolTip="拖动调整大小">
+                        MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown">
                     <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                         <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
                         <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>

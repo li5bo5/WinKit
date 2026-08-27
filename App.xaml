@@ -31,6 +31,198 @@
         <SolidColorBrush x:Key="ThemeScrollBarThumbBrush" Color="#4D000000"/>
 
         <!-- ══════════════════════════════════════════════
+             轻量半透明按钮体系画刷（动态资源兜底）
+        ══════════════════════════════════════════════ -->
+        <SolidColorBrush x:Key="ThemeGlassButtonBackgroundBrush" Color="#0D000000"/>
+        <SolidColorBrush x:Key="ThemeGlassButtonBorderBrush" Color="#1A000000"/>
+        <SolidColorBrush x:Key="ThemeGlassButtonForegroundBrush" Color="#333333"/>
+        <SolidColorBrush x:Key="ThemeGlassButtonHoverBackgroundBrush" Color="#1A000000"/>
+        <SolidColorBrush x:Key="ThemeGlassButtonHoverBorderBrush" Color="#33000000"/>
+        <SolidColorBrush x:Key="ThemeGlassButtonHoverForegroundBrush" Color="#111111"/>
+        <SolidColorBrush x:Key="ThemeGlassDangerHoverBackgroundBrush" Color="#1AF44336"/>
+        <SolidColorBrush x:Key="ThemeGlassDangerHoverBorderBrush" Color="#4DF44336"/>
+        <SolidColorBrush x:Key="ThemeGlassDangerHoverForegroundBrush" Color="#D32F2F"/>
+
+        <!-- 悬浮操作胶囊底板画刷（文字遮蔽增强） -->
+        <SolidColorBrush x:Key="ThemeActionCapsuleBackgroundBrush" Color="#EEF5F5F7"/>
+        <SolidColorBrush x:Key="ThemeActionCapsuleBorderBrush" Color="#22000000"/>
+
+        <!-- 窗口置顶状态顶部微光指示线画刷 -->
+        <SolidColorBrush x:Key="ThemeTopmostAccentLineBrush" Color="#2A75D3"/>
+
+        <!-- ══════════════════════════════════════════════
+             统一矢量图标 Geometry 数据
+        ══════════════════════════════════════════════ -->
+        <!-- 关闭 / 退出 ✕ -->
+        <StreamGeometry x:Key="GeoClose">M 2,2 L 10,10 M 10,2 L 2,10</StreamGeometry>
+        <!-- 固定 / 置顶未激活 📌 -->
+        <StreamGeometry x:Key="GeoPin">M 6,1 L 9,4 L 7,6 L 8,9 L 6,8 L 4,11 L 3,9 L 1,6 L 4,5 Z</StreamGeometry>
+        <!-- 固定 / 置顶激活 📍 -->
+        <StreamGeometry x:Key="GeoPinned">M 6,1 C 4.5,1 3,2.5 3,4 C 3,6.5 6,11 6,11 C 6,11 9,6.5 9,4 C 9,2.5 7.5,1 6,1 Z M 6,5 C 5.4,5 5,4.6 5,4 C 5,3.4 5.4,3 6,3 C 6.6,3 7,3.4 7,4 C 7,4.6 6.6,5 6,5 Z</StreamGeometry>
+        <!-- 穿透 ⊙ -->
+        <StreamGeometry x:Key="GeoPassThrough">M 6,1 A 5,5 0 1 0 6,11 A 5,5 0 1 0 6,1 Z M 6,4 A 2,2 0 1 1 6,8 A 2,2 0 1 1 6,4 Z</StreamGeometry>
+        <!-- 预览 / 小眼睛 👁️ -->
+        <StreamGeometry x:Key="GeoEye">M 1,6 C 2.5,2.5 9.5,2.5 11,6 C 9.5,9.5 2.5,9.5 1,6 Z M 6,8 A 2,2 0 1 0 6,4 A 2,2 0 1 0 6,8 Z</StreamGeometry>
+        <!-- 删除 🗑️ -->
+        <StreamGeometry x:Key="GeoDelete">M 3,3 L 9,3 M 4,3 L 4,10 C 4,10.5 4.5,11 5,11 L 7,11 C 7.5,11 8,10.5 8,10 L 8,3 M 5,1.5 L 7,1.5</StreamGeometry>
+        <!-- 编辑 ✏️ -->
+        <StreamGeometry x:Key="GeoEdit">M 8.5,1.5 L 10.5,3.5 L 4,10 L 1.5,10.5 L 2,8 Z</StreamGeometry>
+        <!-- 恢复 / 撤回 ↩️ -->
+        <StreamGeometry x:Key="GeoRestore">M 4,4 L 1.5,6.5 L 4,9 M 2,6.5 L 7.5,6.5 C 9,6.5 10.5,7.5 10.5,9</StreamGeometry>
+        <!-- 清空 / 扫帚 🧹 -->
+        <StreamGeometry x:Key="GeoClear">M 2,10 L 10,2 M 8,1 L 11,4 M 1,11 L 3,11</StreamGeometry>
+
+        <!-- ══════════════════════════════════════════════
+             统一轻量半透明毛玻璃按钮 (WinKitGlassIconButton)
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="WinKitGlassIconButton" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeGlassButtonForegroundBrush}"/>
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius4}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeGlassButtonHoverBackgroundBrush}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource ThemeGlassButtonHoverBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeGlassButtonHoverForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             统一轻量半透明危险按钮 (WinKitGlassDangerIconButton)
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="WinKitGlassDangerIconButton" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeGlassButtonForegroundBrush}"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius4}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeGlassDangerHoverBackgroundBrush}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource ThemeGlassDangerHoverBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeGlassDangerHoverForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             悬浮操作按钮胶囊底板样式 (ActionCapsuleBorder)
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="ActionCapsuleBorder" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ThemeActionCapsuleBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeActionCapsuleBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Radius4}"/>
+            <Setter Property="Padding" Value="2"/>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             统一轻量半透明切换按钮 (WinKitGlassToggleButton)
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="WinKitGlassToggleButton" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeGlassButtonBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeGlassButtonBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeGlassButtonForegroundBrush}"/>
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius4}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeGlassButtonHoverBackgroundBrush}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource ThemeGlassButtonHoverBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeGlassButtonHoverForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeItemSelectedBrush}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource ThemeGlassButtonHoverBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             待办事项文本样式（支持折叠/展开显示动态切换）
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="TodoItemTextBlockStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="LineHeight" Value="18"/>
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+            <Setter Property="MaxHeight" Value="54"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
              细滚动条样式（4px宽，圆角滑块，自动隐藏）
         ══════════════════════════════════════════════ -->
         <Style x:Key="NarrowScrollBarThumb" TargetType="Thumb">
@@ -264,6 +456,43 @@
         </Style>
 
         <!-- ══════════════════════════════════════════════
+             独立标题栏关闭按钮样式 (WinKitGlassCloseButton)
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="WinKitGlassCloseButton" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource Radius4}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeGlassDangerHoverBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeGlassDangerHoverForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
              标题栏按钮（置顶/最小化/关闭）
         ══════════════════════════════════════════════ -->
         <Style x:Key="TitleBarBtn" TargetType="Button">
@@ -330,6 +559,9 @@
                                 <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonHoverBrush}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
                             </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonPressedBrush}"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -337,7 +569,7 @@
         </Style>
 
         <!-- ══════════════════════════════════════════════
-             内联输入框（双击添加/搜索框）
+             待办多行内联输入框（双击添加/编辑多行待办）
         ══════════════════════════════════════════════ -->
         <Style x:Key="InlineTextBox" TargetType="TextBox">
             <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
@@ -369,6 +601,62 @@
                                        Foreground="{DynamicResource ThemeTextPlaceholderBrush}" 
                                        IsHitTestVisible="False"
                                        Margin="12,5"
+                                       VerticalAlignment="Center"
+                                       Visibility="Collapsed"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Text" Value=""/>
+                                    <Condition Property="Tag" Value="{x:Null}" SourceName="watermark"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="watermark" Property="Visibility" Value="Visible"/>
+                            </MultiTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="#2A5CB8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ══════════════════════════════════════════════
+             偏好设置中心快捷键/表单专属输入框（单行，固定26px高度）
+        ══════════════════════════════════════════════ -->
+        <Style x:Key="HotkeyInputBox" TargetType="TextBox">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{StaticResource Radius4}">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock x:Name="watermark" 
+                                       Text="{TemplateBinding Tag}" 
+                                       Foreground="{DynamicResource ThemeTextPlaceholderBrush}" 
+                                       IsHitTestVisible="False"
+                                       Margin="8,0"
                                        VerticalAlignment="Center"
                                        Visibility="Collapsed"/>
                         </Grid>
@@ -449,7 +737,7 @@
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Height" Value="28"/>
+            <Setter Property="Height" Value="26"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -480,13 +768,13 @@
              统一设计系统：半透明圆角 ComboBox
         ══════════════════════════════════════════════ -->
         <Style x:Key="FluentComboBox" TargetType="ComboBox">
-            <Setter Property="Height" Value="28"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="8,0,24,0"/>
+            <Setter Property="Padding" Value="6,0,22,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -507,7 +795,7 @@
                                                 Background="{TemplateBinding Background}"
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="{StaticResource Radius6}">
+                                                CornerRadius="{StaticResource Radius4}">
                                             <Grid>
                                                 <!-- 右侧几何箭头 -->
                                                 <Path x:Name="Arrow"
@@ -516,7 +804,7 @@
                                                       StrokeThickness="1.5"
                                                       HorizontalAlignment="Right"
                                                       VerticalAlignment="Center"
-                                                      Margin="0,0,10,0"/>
+                                                      Margin="0,0,8,0"/>
                                             </Grid>
                                         </Border>
                                         <ControlTemplate.Triggers>

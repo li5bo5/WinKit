@@ -41,6 +41,7 @@ namespace WinKit.Common
         public const byte VK_ALT = 0x12;
         public const byte VK_SHIFT = 0x10;
         public const byte VK_ESCAPE = 0x1B;
+        public const byte VK_BACK = 0x08;
 
         public const uint KEYEVENTF_KEYUP = 0x0002;
         public const int LLKHF_INJECTED = 0x0010;
@@ -88,6 +89,20 @@ namespace WinKit.Common
             public IntPtr dwExtraInfo;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct GUITHREADINFO
+        {
+            public int cbSize;
+            public int flags;
+            public IntPtr hwndActive;
+            public IntPtr hwndFocus;
+            public IntPtr hwndCapture;
+            public IntPtr hwndMenuOwner;
+            public IntPtr hwndMoveSize;
+            public IntPtr hwndCaret;
+            public RECT rcCaret;
+        }
+
         // ── P/Invoke 签名 ──────────────────────────────────────────────
         [DllImport("user32.dll")]
         public static extern bool GetCursorPos(out POINT lpPoint);
@@ -98,6 +113,15 @@ namespace WinKit.Common
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern uint GetClipboardSequenceNumber();
+
+        [DllImport("user32.dll")]
+        public static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
+
+        [DllImport("user32.dll")]
+        public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -151,6 +175,127 @@ namespace WinKit.Common
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool BringWindowToTop(IntPtr hWnd);
+
+        public const uint GCS_COMPSTR = 0x0008;
+        public const uint IME_CMODE_NATIVE = 0x0001;
+
+        [DllImport("imm32.dll")]
+        public static extern IntPtr ImmGetContext(IntPtr hWnd);
+
+        [DllImport("imm32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ImmGetOpenStatus(IntPtr hIMC);
+
+        [DllImport("imm32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ImmGetConversionStatus(IntPtr hIMC, out uint lpfdwConversion, out uint lpfdwSentence);
+
+        [DllImport("imm32.dll")]
+        public static extern int ImmGetCompositionString(IntPtr hIMC, uint dwIndex, [Out] byte[]? lpBuf, uint dwBufLen);
+
+        [DllImport("imm32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ImmReleaseContext(IntPtr hWnd, IntPtr hIMC);
+
+        [DllImport("imm32.dll")]
+        public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetKeyboardLayout(uint idThread);
+
+        /// <summary>
+        /// 检测指定窗口当前关联线程的键盘布局是否为中文输入法（简体/繁体/香港/澳门/新加坡）
+        /// 若为纯英文布局（如 en-US 0x0409）或其它语言布局则返回 false
+        /// </summary>
+        public static bool IsChineseKeyboardLayout(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+            uint threadId = GetWindowThreadProcessId(hWnd, out _);
+            IntPtr hkl = GetKeyboardLayout(threadId);
+            ushort langId = (ushort)((long)hkl & 0xFFFF);
+            // 0x0804 = 中文(简体), 0x0404 = 中文(台湾繁体), 0x0C04 = 中文(香港繁体), 0x1404 = 中文(澳门), 0x1004 = 中文(新加坡)
+            return (langId == 0x0804 || langId == 0x0404 || langId == 0x0C04 || langId == 0x1404 || langId == 0x1004);
+        }
+
+        /// <summary>
+        /// 检测指定输入窗口当前是否处于中文拼音输入状态（有候选框）
+        /// 若为纯英文布局，或中文输入法下按 Shift 切换到了英文模式，则返回 false（字符已直接上屏）
+        /// </summary>
+        public static bool IsImeComposingChinese(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+
+            uint threadId = GetWindowThreadProcessId(hWnd, out _);
+
+            // 1. 检查当前前台线程的键盘布局语言
+            IntPtr hkl = GetKeyboardLayout(threadId);
+            ushort langId = (ushort)((long)hkl & 0xFFFF);
+            // 0x0804 = 中文(中国简体), 0x0404 = 中文(台湾繁体), 0x0C04 = 中文(香港繁体)
+            bool isChineseLayout = (langId == 0x0804 || langId == 0x0404 || langId == 0x0C04);
+
+            if (!isChineseLayout)
+            {
+                // 纯英文/非中文键盘布局 -> 直接上屏模式
+                return false;
+            }
+
+            // 2. 获取真正持有焦点的控件
+            var guiInfo = new GUITHREADINFO();
+            guiInfo.cbSize = Marshal.SizeOf(guiInfo);
+            IntPtr targetHwnd = hWnd;
+            if (GetGUIThreadInfo(threadId, ref guiInfo) && guiInfo.hwndFocus != IntPtr.Zero && IsWindow(guiInfo.hwndFocus))
+            {
+                targetHwnd = guiInfo.hwndFocus;
+            }
+
+            // 3. 在中文输入法下，检查是否按 Shift 切换到了英文模式
+            IntPtr hImc = ImmGetContext(targetHwnd);
+            if (hImc == IntPtr.Zero)
+            {
+                IntPtr defIme = ImmGetDefaultIMEWnd(targetHwnd);
+                if (defIme != IntPtr.Zero) hImc = ImmGetContext(defIme);
+            }
+            if (hImc == IntPtr.Zero && targetHwnd != hWnd)
+            {
+                hImc = ImmGetContext(hWnd);
+            }
+
+            if (hImc != IntPtr.Zero)
+            {
+                try
+                {
+                    bool isOpen = ImmGetOpenStatus(hImc);
+                    if (!isOpen)
+                    {
+                        // 用户关闭了输入法或切到了英文模式 -> 直接上屏
+                        return false;
+                    }
+
+                    if (ImmGetConversionStatus(hImc, out uint conversion, out _))
+                    {
+                        // 若不包含 IME_CMODE_NATIVE (0x0001)，说明用户单按 Shift 切到了英文状态
+                        if ((conversion & IME_CMODE_NATIVE) == 0)
+                        {
+                            return false;
+                        }
+                    }
+
+                    // 处于中文模式且开启中
+                    return true;
+                }
+                catch
+                {
+                    // 容错
+                }
+                finally
+                {
+                    ImmReleaseContext(targetHwnd, hImc);
+                }
+            }
+
+            // 默认如果在中文布局下，视为中文模式
+            return true;
+        }
 
         /// <summary>
         /// 穿透 Windows 权限限制强制将指定窗口切换为前台焦点窗口

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using WinKit.Common;
 
 namespace WinKit.Clipboard.Services
 {
@@ -171,16 +172,36 @@ namespace WinKit.Clipboard.Services
         /// 当处于快捷键录入捕获模式时设为 true，拦截所有物理按键不传递给系统和其它热键
         /// </summary>
         public bool IsCapturing { get; set; } = false;
+
+        /// <summary>
+        /// 是否启用连续输入 vv 呼出常用短语
+        /// </summary>
+        public bool QuickPhraseEnabled { get; set; } = true;
+
+        /// <summary>
+        /// 当命中 vv 触发条件时触发
+        /// </summary>
+        public event Action<IntPtr>? QuickPhraseTriggered;
+
+        private long _lastVKeyDownTicks = 0;
+        private bool _vKeyWasReleased = true;
+        private readonly uint _currentProcessId = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+
         // ── Win32 常量 ─────────────────────────────────────────────────
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN     = 0x0100;
+        private const int WM_KEYUP       = 0x0101;
         private const int WM_SYSKEYDOWN  = 0x0104;
+        private const int WM_SYSKEYUP    = 0x0105;
 
-        public const int VK_LWIN  = 0x5B;
-        public const int VK_RWIN  = 0x5C;
-        public const int VK_CTRL  = 0x11;
-        public const int VK_ALT   = 0x12;
-        public const int VK_SHIFT = 0x10;
+        public const int VK_LWIN   = 0x5B;
+        public const int VK_RWIN   = 0x5C;
+        public const int VK_CTRL   = 0x11;
+        public const int VK_ALT    = 0x12;
+        public const int VK_SHIFT  = 0x10;
+        public const int VK_V      = 0x56;
+        public const int VK_BACK   = 0x08;
+        public const int VK_ESCAPE = 0x1B;
 
         private const uint KEYEVENTF_KEYUP = 0x0002;
         private const int LLKHF_INJECTED   = 0x0010;
@@ -370,6 +391,15 @@ namespace WinKit.Clipboard.Services
                 int vkCode  = hookStruct.vkCode;
                 int message = wParam.ToInt32();
 
+                // 释放按键监听，重置长按状态
+                if (message == WM_KEYUP || message == WM_SYSKEYUP)
+                {
+                    if (vkCode == VK_V)
+                    {
+                        _vKeyWasReleased = true;
+                    }
+                }
+
                 bool isKeyDown = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
                 if (isKeyDown)
                 {
@@ -388,6 +418,60 @@ namespace WinKit.Clipboard.Services
                             keybd_event(0xFF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
                         }
                         return CallNextHookEx(_hookID, nCode, wParam, lParam);
+                    }
+
+                    // ── 常用短语 vv 连击判定 ───────────────────────────────
+                    if (QuickPhraseEnabled && !lwinDown && !rwinDown && !ctrlDown && !altDown && !shiftDown)
+                    {
+                        if (vkCode == VK_V)
+                        {
+                            if (_vKeyWasReleased)
+                            {
+                                _vKeyWasReleased = false;
+                                long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                                long interval = now - _lastVKeyDownTicks;
+
+                                if (interval > 0 && interval <= 500)
+                                {
+                                    _lastVKeyDownTicks = 0;
+
+                                    IntPtr fgWnd = NativeMethods.GetForegroundWindow();
+                                    NativeMethods.GetWindowThreadProcessId(fgWnd, out uint fgPid);
+
+                                    // 仅当目标窗口不在本进程内、且当前键盘布局为中文输入法时才触发快捷短语
+                                    if (fgPid != _currentProcessId && fgWnd != IntPtr.Zero && NativeMethods.IsChineseKeyboardLayout(fgWnd))
+                                    {
+                                        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                                        {
+                                            // 统一发送 Esc 冲刷掉输入法候选框或临时菜单
+                                            keybd_event((byte)VK_ESCAPE, 0, 0, UIntPtr.Zero);
+                                            System.Threading.Thread.Sleep(20);
+                                            keybd_event((byte)VK_ESCAPE, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                                            System.Threading.Thread.Sleep(30);
+
+                                            // 唤出常用短语窗口，传递 targetHwnd
+                                            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                                            {
+                                                QuickPhraseTriggered?.Invoke(fgWnd);
+                                            }));
+                                        });
+                                    }
+                                }
+                                else
+                                {
+                                    _lastVKeyDownTicks = now;
+                                }
+                            }
+                        }
+                        else if (vkCode != VK_LWIN && vkCode != VK_RWIN && vkCode != VK_CTRL && vkCode != VK_ALT && vkCode != VK_SHIFT)
+                        {
+                            // 敲击了其他字符键，重置 vv 计时
+                            _lastVKeyDownTicks = 0;
+                        }
+                    }
+                    else if (vkCode != VK_V)
+                    {
+                        _lastVKeyDownTicks = 0;
                     }
 
                     foreach (var (desc, callback) in _hotkeys)

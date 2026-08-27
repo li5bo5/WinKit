@@ -8,7 +8,7 @@ using WinKit.Common;
 namespace WinKit.Clipboard.Services
 {
     /// <summary>
-    /// 剪贴板历史数据管理服务，基于 JSON Lines 明文存储，支持上限折半清理
+    /// 剪贴板历史数据管理服务，基于 JSON Lines 明文存储，支持文本与图片双模态、上限折半清理与磁盘文件协同
     /// </summary>
     public class ClipboardManager : IDisposable
     {
@@ -53,12 +53,11 @@ namespace WinKit.Clipboard.Services
             {
                 var loaded = _storage.Load();
                 _items.Clear();
-                foreach (var item in loaded.OrderByDescending(i => i.Timestamp))
+                foreach (var item in loaded.OrderByDescending(i => i.CreatedAt))
                 {
                     _items.Add(item);
                 }
 
-                // 启动时若超过上限，执行一次折半清理
                 EnforceMaxCapacity();
             }
             catch (Exception ex)
@@ -68,60 +67,62 @@ namespace WinKit.Clipboard.Services
         }
 
         /// <summary>
-        /// 添加文本条目（支持去重与容量超限折半清理）
+        /// 添加任意剪贴板条目（文本或图片），支持精准去重与折半容量控制
         /// </summary>
-        public void AddTextItem(string text)
+        public void AddItem(ClipboardItem newItem)
         {
-            if (string.IsNullOrWhiteSpace(text)) return;
-
-            text = text.Trim();
-            if (text.Length == 0) return;
+            if (newItem == null) return;
 
             var settings = _settingsManager.Settings;
 
-            // 1. 去重逻辑
-            if (settings.PasteEnableTextDeduplication)
+            if (newItem.IsText && !string.IsNullOrEmpty(newItem.Content))
             {
-                var existingItem = _items.FirstOrDefault(item => item.Type == ClipboardItemType.Text && item.Content == text);
-                if (existingItem != null)
+                string text = newItem.Content.Trim();
+                if (settings.PasteEnableTextDeduplication)
                 {
-                    existingItem.Timestamp = DateTime.Now;
-                    if (_items.IndexOf(existingItem) != 0)
+                    var duplicates = _items.Where(i => i.IsText && i.Content == text).ToList();
+                    foreach (var dup in duplicates)
                     {
-                        _items.Remove(existingItem);
-                        _items.Insert(0, existingItem);
+                        _items.Remove(dup);
                     }
-                    _storage.Save(_items);
-                    return;
+                }
+                else
+                {
+                    if (_items.Count > 0 && _items[0].IsText && _items[0].Content == text)
+                        return;
                 }
             }
-            else
+            else if (newItem.IsImage && !string.IsNullOrEmpty(newItem.ImageHash))
             {
-                // 简单去重：如果与最新项完全相同则忽略
-                if (_items.Count > 0 && _items[0].Type == ClipboardItemType.Text && _items[0].Content == text)
-                    return;
+                var existing = _items.FirstOrDefault(i => i.IsImage && i.ImageHash == newItem.ImageHash);
+                if (existing != null)
+                {
+                    // 命中已有图片去重：彻底删除旧项数据及其磁盘文件，采用新捕获的全新图片项
+                    _items.Remove(existing);
+                    ImageProcessingService.SafeDeleteFiles(existing);
+                }
             }
 
-            // 2. 插入新项到顶部
-            var newItem = new ClipboardItem
-            {
-                Type = ClipboardItemType.Text,
-                ContentType = "Text",
-                Content = text,
-                Timestamp = DateTime.Now
-            };
-
             _items.Insert(0, newItem);
-
-            // 3. 检查容量上限，超限时折半清理
             EnforceMaxCapacity();
-
-            // 4. 持久化保存
             _storage.Save(_items);
         }
 
+        public void AddTextItem(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            AddItem(new ClipboardItem
+            {
+                Id = Guid.NewGuid(),
+                Type = ClipboardItemType.Text,
+                ContentType = "Text",
+                Content = text.Trim(),
+                CreatedAt = DateTimeOffset.Now
+            });
+        }
+
         /// <summary>
-        /// 容量控制：超过上限 N 时，一次性截断清理至 N / 2 条
+        /// 容量控制：超过上限 N 时，一次性截断清理至 N / 2 条，并同步清理淘汰条目的图片文件
         /// </summary>
         private void EnforceMaxCapacity()
         {
@@ -134,14 +135,16 @@ namespace WinKit.Clipboard.Services
                 int targetCount = Math.Max(50, maxItems / 2);
                 while (_items.Count > targetCount)
                 {
+                    var evicted = _items[_items.Count - 1];
                     _items.RemoveAt(_items.Count - 1);
+                    if (evicted.IsImage)
+                    {
+                        ImageProcessingService.SafeDeleteFiles(evicted);
+                    }
                 }
             }
         }
 
-        /// <summary>
-        /// 将指定条目移动到列表顶部
-        /// </summary>
         public void MoveToTop(ClipboardItem item)
         {
             if (item == null) return;
@@ -149,37 +152,60 @@ namespace WinKit.Clipboard.Services
             if (index > 0)
             {
                 _items.RemoveAt(index);
-                item.Timestamp = DateTime.Now;
+                item.CreatedAt = DateTimeOffset.Now;
                 _items.Insert(0, item);
                 _storage.Save(_items);
             }
         }
 
-        /// <summary>
-        /// 删除指定条目
-        /// </summary>
         public void RemoveItem(Guid id)
         {
             var item = _items.FirstOrDefault(i => i.Id == id);
             if (item != null)
             {
                 _items.Remove(item);
+                if (item.IsImage)
+                {
+                    ImageProcessingService.SafeDeleteFiles(item);
+                }
                 _storage.Save(_items);
             }
         }
 
-        /// <summary>
-        /// 清空全部剪贴板历史
-        /// </summary>
+        public void RemoveItems(IEnumerable<ClipboardItem> items)
+        {
+            if (items == null) return;
+            bool changed = false;
+            foreach (var item in items)
+            {
+                if (_items.Remove(item))
+                {
+                    changed = true;
+                    if (item.IsImage)
+                    {
+                        ImageProcessingService.SafeDeleteFiles(item);
+                    }
+                }
+            }
+            if (changed)
+            {
+                _storage.Save(_items);
+            }
+        }
+
         public void ClearAll()
         {
+            foreach (var item in _items.Where(i => i.IsImage))
+            {
+                ImageProcessingService.SafeDeleteFiles(item);
+            }
             _items.Clear();
             _storage.Save(_items);
         }
 
         public void Dispose()
         {
-            // 纯托管数据，无非托管资源需要释放
+            _storage.Flush();
         }
     }
 }

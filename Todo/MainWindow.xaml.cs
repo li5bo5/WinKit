@@ -85,6 +85,7 @@ namespace WinKit.Todo
 
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TRANSPARENT = 0x00000020;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
 
         [DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hwnd, int index);
@@ -136,21 +137,22 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // 窗口初始化：挂钩 WndProc（用于穿透 hit-test）
+        // 窗口初始化：挂钩 WndProc 并注入 WS_EX_TOOLWINDOW
         // ══════════════════════════════════════════════
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
-            var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var hwndSource = HwndSource.FromHwnd(hwnd);
             hwndSource?.AddHook(WndProc);
 
-            // 如果初始加载的设置中启用了鼠标穿透，立即应用穿透样式
+            int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            extendedStyle |= WS_EX_TOOLWINDOW;
             if (_isPassThrough)
             {
-                var hwnd = new WindowInteropHelper(this).Handle;
-                int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT);
+                extendedStyle |= WS_EX_TRANSPARENT;
             }
+            SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle);
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -205,9 +207,15 @@ namespace WinKit.Todo
 
         private void SetTitleButtonsOpacity(double opacity)
         {
-            PinBtn.Opacity         = opacity;
-            PassThroughBtn.Opacity = opacity;
-            CloseBtn.Opacity       = opacity;
+            if (AddBtn != null) AddBtn.Opacity                 = opacity;
+            if (PinBtn != null) PinBtn.Opacity                 = opacity;
+            if (PassThroughBtn != null) PassThroughBtn.Opacity = opacity;
+            if (CloseBtn != null) CloseBtn.Opacity             = opacity;
+        }
+
+        private void AddBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowInlineInput();
         }
 
         // ResizeGrip 区域悬停：控制 Grip 显示
@@ -245,18 +253,15 @@ namespace WinKit.Todo
         {
             _isPinned    = !_isPinned;
             this.Topmost = _isPinned;
-
-            if (_isPinned)
-            {
-                PinBtn.Content = "📍";
-                PinBtn.ToolTip = "取消置顶";
-            }
-            else
-            {
-                PinBtn.Content = "📌";
-                PinBtn.ToolTip = "置顶";
-            }
+            UpdatePinButton();
             SaveSettings();
+        }
+
+        private void UpdatePinButton()
+        {
+            PinBtn.Content = "📌";
+            if (TopAccentLine != null)
+                TopAccentLine.Visibility = _isPinned ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ══════════════════════════════════════════════
@@ -280,7 +285,6 @@ namespace WinKit.Todo
             if (_isPassThrough)
             {
                 PassThroughBtn.Content = "◉";
-                PassThroughBtn.ToolTip = "取消穿透";
                 ResizeGripArea.Opacity = 0;
                 
                 StartPassThroughTimer();
@@ -288,7 +292,6 @@ namespace WinKit.Todo
             else
             {
                 PassThroughBtn.Content = "⊙";
-                PassThroughBtn.ToolTip = "穿透";
                 
                 StopPassThroughTimer();
                 
@@ -718,28 +721,17 @@ namespace WinKit.Todo
 
             // 应用置顶状态
             this.Topmost = _isPinned;
-            if (_isPinned)
-            {
-                PinBtn.Content = "📍";
-                PinBtn.ToolTip = "取消置顶";
-            }
-            else
-            {
-                PinBtn.Content = "📌";
-                PinBtn.ToolTip = "置顶";
-            }
+            UpdatePinButton();
 
             // 应用穿透状态
             if (_isPassThrough)
             {
                 PassThroughBtn.Content = "◉";
-                PassThroughBtn.ToolTip = "取消穿透";
                 StartPassThroughTimer();
             }
             else
             {
                 PassThroughBtn.Content = "⊙";
-                PassThroughBtn.ToolTip = "穿透";
                 StopPassThroughTimer();
             }
         }
@@ -770,23 +762,20 @@ namespace WinKit.Todo
                 // 当前处于置顶状态 -> 取消置顶
                 _isPinned = false;
                 this.Topmost = false;
-                PinBtn.Content = "📌";
-                PinBtn.ToolTip = "置顶";
+                UpdatePinButton();
             }
             else
             {
                 // 当前处于非置顶状态 -> 置顶 + 取消穿透
                 _isPinned = true;
                 this.Topmost = true;
-                PinBtn.Content = "📍";
-                PinBtn.ToolTip = "取消置顶";
+                UpdatePinButton();
 
                 // 取消穿透（若处于穿透状态）
                 if (_isPassThrough)
                 {
                     _isPassThrough = false;
                     PassThroughBtn.Content = "⊙";
-                    PassThroughBtn.ToolTip = "穿透";
                     StopPassThroughTimer();
 
                     var hwnd = new WindowInteropHelper(this).Handle;

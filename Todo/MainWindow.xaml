@@ -22,6 +22,17 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
+            <!-- 窗口置顶顶部微光指示线 (置顶时常亮，自适应避让圆角) -->
+            <Border x:Name="TopAccentLine"
+                    Grid.Row="0"
+                    Height="1.5"
+                    VerticalAlignment="Top"
+                    Margin="16,0,16,0"
+                    CornerRadius="1"
+                    Background="{DynamicResource ThemeTopmostAccentLineBrush}"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False"/>
+
             <!-- ══════════════════════════════════════════
                  标题栏：拖动 + TitleBar 按钮组
             ══════════════════════════════════════════ -->
@@ -44,23 +55,33 @@
                             HorizontalAlignment="Right"
                             Margin="0,0,8,0">
 
+                    <Button x:Name="AddBtn"
+                            Content="＋"
+                            Style="{StaticResource TitleBarBtn}"
+                            Width="26" Height="26"
+                            Margin="2,0"
+                            Click="AddBtn_Click"/>
+
                     <Button x:Name="PinBtn"
-                             Content="📍"
-                             Style="{StaticResource TitleBarBtn}"
-                             Click="PinBtn_Click"
-                             ToolTip="取消置顶"/>
+                            Content="📌"
+                            Style="{StaticResource TitleBarBtn}"
+                            Width="26" Height="26"
+                            Margin="2,0"
+                            Click="PinBtn_Click"/>
 
                     <Button x:Name="PassThroughBtn"
-                             Content="⊙"
-                             Style="{StaticResource TitleBarBtn}"
-                             Click="PassThroughBtn_Click"
-                             ToolTip="穿透"/>
+                            Content="⊙"
+                            Style="{StaticResource TitleBarBtn}"
+                            Width="26" Height="26"
+                            Margin="2,0"
+                            Click="PassThroughBtn_Click"/>
 
                     <Button x:Name="CloseBtn"
-                             Content="✕"
-                             Style="{StaticResource TitleBarBtn}"
-                             Click="CloseBtn_Click"
-                             ToolTip="隐藏到托盘"/>
+                            Content="✕"
+                            Style="{StaticResource TitleBarBtn}"
+                            Width="26" Height="26"
+                            Margin="2,0"
+                            Click="CloseBtn_Click"/>
                 </StackPanel>
             </Grid>
 
@@ -130,58 +151,55 @@
                         <ListView.ItemTemplate>
                             <DataTemplate DataType="{x:Type local:TodoItem}">
                                 <Grid Margin="8,5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                    <!-- 1. 底层：内容层，占满 100% 可用宽度 -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <!-- 左侧圆点标识，多行时顶部对齐 -->
-                                    <Ellipse Grid.Column="0"
-                                             Width="6" Height="6"
-                                             Fill="{DynamicResource ThemeTextTertiaryBrush}"
-                                             VerticalAlignment="Top"
-                                             Margin="0,5,8,0"/>
+                                        <!-- 左侧圆点标识，整体纵向绝对居中 -->
+                                        <Ellipse Grid.Column="0"
+                                                 Width="6" Height="6"
+                                                 Fill="{DynamicResource ThemeTextTertiaryBrush}"
+                                                 VerticalAlignment="Center"
+                                                 Margin="0,0,8,0"/>
 
-                                    <!-- 待办文本：自动换行，无字数限制 -->
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Title}"
-                                               FontSize="13"
-                                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"
-                                               TextWrapping="Wrap"
-                                               TextTrimming="CharacterEllipsis"
-                                               LineHeight="18"
-                                               LineStackingStrategy="BlockLineHeight"
-                                               MaxHeight="54"/>
+                                        <!-- 待办文本：自动换行，占满全部宽度，动态折叠/展开 -->
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Title}"
+                                                   Style="{DynamicResource TodoItemTextBlockStyle}"/>
+                                    </Grid>
 
-                                    <!-- 编辑按钮（悬停时显示） -->
-                                    <Button x:Name="EditBtn"
-                                            Grid.Column="2"
-                                            Content="✎"
-                                            Style="{StaticResource ActionBtn}"
-                                            Tag="{Binding Id}"
-                                            Click="EditBtn_Click"
-                                            Visibility="Hidden"
-                                            ToolTip="编辑"/>
+                                    <!-- 2. 顶层：右侧重叠透明悬浮按钮层 (鼠标移入时平滑浮现) -->
+                                    <StackPanel x:Name="OverlayActions"
+                                                Orientation="Horizontal"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Panel.ZIndex="10"
+                                                Opacity="0"
+                                                Margin="0,0,4,0">
+                                        <!-- 编辑按钮 -->
+                                        <Button x:Name="EditBtn"
+                                                Content="✎"
+                                                Style="{StaticResource ActionBtn}"
+                                                Tag="{Binding Id}"
+                                                Click="EditBtn_Click"/>
 
-                                    <!-- 删除按钮（悬停时显示） -->
-                                    <Button x:Name="DeleteBtn"
-                                            Grid.Column="3"
-                                            Content="✕"
-                                            Style="{StaticResource ActionBtn}"
-                                            Tag="{Binding Id}"
-                                            Click="DeleteBtn_Click"
-                                            Visibility="Hidden"
-                                            ToolTip="删除"/>
+                                        <!-- 删除按钮 -->
+                                        <Button x:Name="DeleteBtn"
+                                                Content="✕"
+                                                Style="{StaticResource ActionBtn}"
+                                                Tag="{Binding Id}"
+                                                Click="DeleteBtn_Click"/>
+                                    </StackPanel>
                                 </Grid>
 
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding IsMouseOver,
                                                  RelativeSource={RelativeSource AncestorType=ListViewItem}}"
                                                  Value="True">
-                                        <Setter TargetName="EditBtn"   Property="Visibility" Value="Visible"/>
-                                        <Setter TargetName="DeleteBtn" Property="Visibility" Value="Visible"/>
+                                        <Setter TargetName="OverlayActions" Property="Opacity" Value="1"/>
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>
@@ -208,8 +226,7 @@
                              Style="{StaticResource InlineTextBox}"
                              PreviewKeyDown="InlineEditBox_PreviewKeyDown"
                              LostFocus="InlineEditBox_LostFocus"
-                             TextChanged="InlineEditBox_TextChanged"
-                             ToolTip="回车确认 / Esc 取消"/>
+                             TextChanged="InlineEditBox_TextChanged"/>
                 </Border>
 
                 <!-- 右下角自定义 ResizeGrip -->
@@ -221,8 +238,7 @@
                             Opacity="0"
                             MouseEnter="ResizeGrip_MouseEnter"
                             MouseLeave="ResizeGrip_MouseLeave"
-                            MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
-                            ToolTip="拖动调整大小">
+                            MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown">
                         <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                             <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
                             <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>

@@ -24,9 +24,49 @@ namespace WinKit.Common
             if (!_isHooked)
             {
                 SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+                _settingsManager.SettingsChanged += OnAppSettingsChanged;
                 _isHooked = true;
             }
             ApplyTheme();
+            UpdateTodoDisplayStyle(_settingsManager.Settings.TodoExpandedDisplay);
+        }
+
+        private static void OnAppSettingsChanged(object? sender, AppSettings e)
+        {
+            Application.Current?.Dispatcher.Invoke(() =>
+            {
+                UpdateTodoDisplayStyle(e.TodoExpandedDisplay);
+            });
+        }
+
+        /// <summary>
+        /// 根据偏好设置动态更新 Todo 文本块样式（折叠 54px 或完全展开）
+        /// </summary>
+        public static void UpdateTodoDisplayStyle(bool expanded)
+        {
+            var res = Application.Current?.Resources;
+            if (res == null) return;
+
+            var style = new Style(typeof(System.Windows.Controls.TextBlock));
+            style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.FontSizeProperty, 13.0));
+            style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.ForegroundProperty, new DynamicResourceExtension("ThemeTextPrimaryBrush")));
+            style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.TextWrappingProperty, TextWrapping.Wrap));
+            style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.LineHeightProperty, 18.0));
+            style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.LineStackingStrategyProperty, LineStackingStrategy.BlockLineHeight));
+            style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center));
+
+            if (expanded)
+            {
+                style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.MaxHeightProperty, double.PositiveInfinity));
+                style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.TextTrimmingProperty, TextTrimming.None));
+            }
+            else
+            {
+                style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.MaxHeightProperty, 54.0));
+                style.Setters.Add(new Setter(System.Windows.Controls.TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis));
+            }
+
+            res["TodoItemTextBlockStyle"] = style;
         }
 
         /// <summary>
@@ -188,6 +228,26 @@ namespace WinKit.Common
 
             // 滚动条滑块
             res["ThemeScrollBarThumbBrush"]  = new SolidColorBrush(isDark ? Color.FromArgb(77, 255, 255, 255) : Color.FromArgb(77, 0, 0, 0));
+
+            // 轻量半透明按钮体系画刷 (WinKit Glass Button)
+            res["ThemeGlassButtonBackgroundBrush"]       = new SolidColorBrush(isDark ? Color.FromArgb(26, 255, 255, 255) : Color.FromArgb(13, 0, 0, 0));
+            res["ThemeGlassButtonBorderBrush"]           = new SolidColorBrush(isDark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(26, 0, 0, 0));
+            res["ThemeGlassButtonForegroundBrush"]       = new SolidColorBrush(isDark ? Color.FromRgb(224, 224, 224) : Color.FromRgb(51, 51, 51));
+            
+            res["ThemeGlassButtonHoverBackgroundBrush"]  = new SolidColorBrush(isDark ? Color.FromArgb(51, 255, 255, 255) : Color.FromArgb(26, 0, 0, 0));
+            res["ThemeGlassButtonHoverBorderBrush"]      = new SolidColorBrush(isDark ? Color.FromArgb(77, 255, 255, 255) : Color.FromArgb(51, 0, 0, 0));
+            res["ThemeGlassButtonHoverForegroundBrush"]  = new SolidColorBrush(isDark ? Color.FromRgb(255, 255, 255) : Color.FromRgb(17, 17, 17));
+
+            res["ThemeGlassDangerHoverBackgroundBrush"]  = new SolidColorBrush(isDark ? Color.FromArgb(51, 244, 67, 54) : Color.FromArgb(26, 244, 67, 54));
+            res["ThemeGlassDangerHoverBorderBrush"]      = new SolidColorBrush(isDark ? Color.FromArgb(128, 244, 67, 54) : Color.FromArgb(77, 244, 67, 54));
+            res["ThemeGlassDangerHoverForegroundBrush"]  = new SolidColorBrush(isDark ? Color.FromRgb(239, 83, 80) : Color.FromRgb(211, 47, 47));
+
+            // 悬浮操作胶囊底板画刷 (Action Capsule)
+            res["ThemeActionCapsuleBackgroundBrush"]     = new SolidColorBrush(isDark ? Color.FromArgb(235, 43, 43, 43) : Color.FromArgb(235, 245, 245, 247));
+            res["ThemeActionCapsuleBorderBrush"]         = new SolidColorBrush(isDark ? Color.FromArgb(60, 255, 255, 255) : Color.FromArgb(35, 0, 0, 0));
+
+            // 窗口置顶顶部微光线条画刷 (Topmost Accent Line)
+            res["ThemeTopmostAccentLineBrush"]           = new SolidColorBrush(isDark ? Color.FromArgb(220, 96, 165, 250) : Color.FromArgb(200, 37, 99, 235));
 
             // 窗体阴影效果
             res["ThemeShadowColor"]          = isDark ? Colors.Black : Colors.Black;

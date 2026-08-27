@@ -37,8 +37,7 @@
                      Style="{StaticResource InlineTextBox}"
                      Margin="0,0,0,12"
                      PreviewKeyDown="InputBox_PreviewKeyDown"
-                     TextChanged="InputBox_TextChanged"
-                     ToolTip="双击/Enter 确认 / Ctrl+S 保存 / Esc 取消"/>
+                     TextChanged="InputBox_TextChanged"/>
         </StackPanel>
     </Border>
 </Window>

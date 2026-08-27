@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
-using WinKit.Common;
+using WinKit.Clipboard;
+using WinKit.Clipboard.Models;
 using WinKit.Clipboard.Services;
+using WinKit.Common;
 
 namespace WinKit
 {
@@ -10,15 +14,19 @@ namespace WinKit
         private SettingsManager?      _settingsManager;
         private ClipboardService?     _clipboardService;
         private ClipboardManager?     _clipboardManager;
+        private QuickPhraseManager?   _quickPhraseManager;
+        private ImageCleanupService?  _imageCleanupService;
         private KeyboardHookService?  _keyboardHookService;
         private TrayHelper?           _trayHelper;
 
         private Todo.MainWindow?      _todoWindow;
         private Clipboard.MainWindow? _pasteWindow;
+        private QuickPhraseWindow?    _quickPhraseWindow;
 
-        public ClipboardManager?   ClipboardManager   => _clipboardManager;
-        public SettingsManager?    SettingsManager    => _settingsManager;
+        public ClipboardManager?    ClipboardManager    => _clipboardManager;
+        public SettingsManager?     SettingsManager     => _settingsManager;
         public KeyboardHookService? KeyboardHookService => _keyboardHookService;
+        public QuickPhraseManager?  QuickPhraseManager  => _quickPhraseManager;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -28,39 +36,72 @@ namespace WinKit
             _settingsManager = new SettingsManager();
             ThemeManager.Initialize(_settingsManager);
 
-            // 2. 初始化剪贴板监听和数据中心（常驻后台）
-            _clipboardService = new ClipboardService();
-            _clipboardManager = new ClipboardManager(_settingsManager);
+            // 2. 初始化常用短语与剪贴板数据中心
+            _quickPhraseManager = new QuickPhraseManager();
+            _clipboardManager   = new ClipboardManager(_settingsManager);
+            _clipboardService   = new ClipboardService();
 
-            _clipboardService.TextChanged += OnClipboardTextChanged;
+            // 3. 初始化独立图片缓存清理服务
+            _imageCleanupService = new ImageCleanupService(
+                _settingsManager,
+                () => _clipboardManager.Items.ToList(),
+                itemsToRemove => Dispatcher.Invoke(() => _clipboardManager.RemoveItems(itemsToRemove))
+            );
+
+            // 4. 监听剪贴板新增条目
+            _clipboardService.ItemDetected += OnClipboardItemDetected;
             if (_settingsManager.Settings.PasteEnableMonitoring)
             {
                 _clipboardService.StartMonitoring();
             }
 
-            // 3. 实例化两个功能窗口
-            _todoWindow  = new Todo.MainWindow(_settingsManager);
-            _pasteWindow = new Clipboard.MainWindow(_clipboardManager, _settingsManager);
+            // 5. 实例化全部功能窗口
+            _todoWindow        = new Todo.MainWindow(_settingsManager);
+            _pasteWindow       = new Clipboard.MainWindow(_clipboardManager, _clipboardService, _settingsManager);
+            _quickPhraseWindow = new QuickPhraseWindow(_quickPhraseManager, _clipboardService);
 
-            // 4. 初始化合并后的托盘服务
+            // 6. 初始化托盘服务
             _trayHelper = new TrayHelper(this, _settingsManager, _todoWindow, _pasteWindow);
             _todoWindow.SetTray(_trayHelper);
 
-            // 5. 开启低级键盘钩子，注册所有自定义全局快捷键与 Esc 全局分发
+            // 7. 开启低级键盘钩子，注册全局快捷键与 Esc / vv 连击分发
             _keyboardHookService = new KeyboardHookService();
+            _keyboardHookService.QuickPhraseTriggered += OnQuickPhraseTriggered;
             RegisterAllHotkeys();
 
-            // 6. 订阅快捷键变更通知：用户保存新配置后热重载
+            // 8. 订阅快捷键与配置变更通知：用户保存新配置后热重载
             _trayHelper.SubscribeHotkeysChanged(ReloadHotkeys);
+            _settingsManager.SettingsChanged += (s, settings) =>
+            {
+                _imageCleanupService?.TriggerCleanup();
+            };
 
-            // 7. 默认展现 TodoList 待办主窗口
+            // 9. 默认展现 TodoList 待办主窗口
             _todoWindow.Show();
             _todoWindow.Activate();
         }
 
-        private void OnClipboardTextChanged(object? sender, string text)
+        private void OnClipboardItemDetected(object? sender, ClipboardItem item)
         {
-            _clipboardManager?.AddTextItem(text);
+            Dispatcher.Invoke(() =>
+            {
+                _clipboardManager?.AddItem(item);
+                if (item.IsImage)
+                {
+                    _imageCleanupService?.TriggerCleanup();
+                }
+            });
+        }
+
+        private void OnQuickPhraseTriggered(IntPtr targetHwnd)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (_quickPhraseWindow != null)
+                {
+                    _quickPhraseWindow.ShowNearCaretOrMouse(targetHwnd);
+                }
+            });
         }
 
         // ══════════════════════════════════════════════
@@ -81,7 +122,7 @@ namespace WinKit
         }
 
         // ══════════════════════════════════════════════
-        // 注册 / 热重载全局键盘钩子（Todo 与 Clipboard 独立）
+        // 注册 / 热重载全局键盘钩子（Todo、Clipboard 与 QuickPhrase 独立）
         // ══════════════════════════════════════════════
         private void RegisterAllHotkeys()
         {
@@ -90,15 +131,23 @@ namespace WinKit
             _keyboardHookService.UnregisterAll();
             var settings = _settingsManager.Settings;
 
-            // ── 0. 全局 Esc 键：仅当剪贴板窗口可见时将其隐藏并拦截，不可见时完全放行 ────
+            // 同步常用短语连击开关
+            _keyboardHookService.QuickPhraseEnabled = settings.QuickPhraseEnabled;
+
+            // ── 0. 全局 Esc 键：优先收起短语窗口与剪贴板窗口 ─────────────
             _keyboardHookService.RegisterHotkey("Esc", () =>
             {
+                if (_quickPhraseWindow != null && _quickPhraseWindow.IsVisible)
+                {
+                    Dispatcher.Invoke(() => _quickPhraseWindow.Hide());
+                    return true;
+                }
                 if (_pasteWindow != null && _pasteWindow.IsVisible)
                 {
                     Dispatcher.Invoke(() => _pasteWindow.Hide());
-                    return true; // 剪贴板已可见，消费并拦截 Esc
+                    return true;
                 }
-                return false; // 剪贴板未可见，完全放行 Esc 给前台活动窗口（TodoList/EditDialog 等）
+                return false; // 放行 Esc 给前台活动窗口
             });
 
             // ── 1. 置顶显示快捷键（无条件常驻）───────────────────────
@@ -139,6 +188,7 @@ namespace WinKit
             _keyboardHookService?.Dispose();
             _clipboardService?.Dispose();
             _trayHelper?.Dispose();
+            _imageCleanupService?.Dispose();
             _clipboardManager?.Dispose();
 
             base.OnExit(e);

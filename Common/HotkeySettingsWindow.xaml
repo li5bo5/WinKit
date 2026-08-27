@@ -20,20 +20,24 @@
             </Grid.RowDefinitions>
 
             <!-- 标题栏 -->
-            <Grid Grid.Row="0">
+            <Grid Grid.Row="0" x:Name="TitleBar"
+                  MouseEnter="TitleBar_MouseEnter"
+                  MouseLeave="TitleBar_MouseLeave"
+                  Background="Transparent">
                 <TextBlock Text="偏好设置"
                            VerticalAlignment="Center"
                            Margin="16,0"
                            FontSize="13.5"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
-                <Button Content="✕"
+                <Button x:Name="CloseBtn"
+                        Content="✕"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Margin="0,0,10,0"
                         Width="26" Height="26"
+                        Opacity="0"
                         Style="{StaticResource TitleBarBtn}"
-                        Opacity="1"
                         Click="CloseBtn_Click"/>
             </Grid>
 
@@ -55,7 +59,7 @@
                             <!-- 置顶显示快捷键 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -63,14 +67,13 @@
                                     <TextBlock Text="默认：Ctrl + D" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBox x:Name="HkTodoTop" Grid.Column="1"
-                                         Style="{StaticResource InlineTextBox}"
+                                         Style="{StaticResource HotkeyInputBox}"
                                          IsReadOnly="True"
                                          GotFocus="HotkeyBox_GotFocus"
                                          LostFocus="HotkeyBox_LostFocus"
                                          PreviewKeyDown="HotkeyBox_PreviewKeyDown"
                                          Tag="HotkeyTodoTopToggle"
-                                         Cursor="Hand"
-                                         ToolTip="点击此处，然后按下目标快捷键"/>
+                                         Cursor="Hand"/>
                             </Grid>
 
                             <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
@@ -78,7 +81,7 @@
                             <!-- 保存并退出编辑快捷键 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -86,14 +89,29 @@
                                     <TextBlock Text="默认：Ctrl + S" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBox x:Name="HkSaveExit" Grid.Column="1"
-                                         Style="{StaticResource InlineTextBox}"
+                                         Style="{StaticResource HotkeyInputBox}"
                                          IsReadOnly="True"
                                          GotFocus="HotkeyBox_GotFocus"
                                          LostFocus="HotkeyBox_LostFocus"
                                          PreviewKeyDown="HotkeyBox_PreviewKeyDown"
                                          Tag="HotkeyTodoSaveAndExit"
-                                         Cursor="Hand"
-                                         ToolTip="点击此处，然后按下目标快捷键"/>
+                                         Cursor="Hand"/>
+                            </Grid>
+
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
+
+                            <!-- 待办事项展开显示 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="待办内容展开显示" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="完整展开全部多行文本，自适应高度" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkTodoExpandedDisplay" Grid.Column="1"
+                                          Style="{StaticResource FluentCheckBox}"/>
                             </Grid>
 
                             <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
@@ -117,7 +135,7 @@
                             <!-- 待办历史保留天数 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -136,15 +154,68 @@
                     </Border>
 
                     <!-- ══════════════════════════════════════════
-                         分组 2：剪贴板 (Clipboard)
+                         分组 2：常用短语 (Quick Phrases)
                     ══════════════════════════════════════════ -->
-                    <TextBlock Text="剪贴板 (Clipboard)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,2,0,6"/>
+                    <TextBlock Text="常用短语 (Quick Phrases)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,6,0,6"/>
+                    <Border Style="{StaticResource PreferencesCard}">
+                        <StackPanel>
+                            <!-- 启用 vv 触发常用短语 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="启用连续输入 vv 呼出短语" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="快速连按两次小写 v 键呼出常用短语选择框" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkQuickPhrase" Grid.Column="1"
+                                          Style="{StaticResource FluentCheckBox}"/>
+                            </Grid>
+
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
+
+                            <!-- 短语文件管理操作 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="短语库管理" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="自定义或恢复默认" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <Grid Grid.Column="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="6"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="BtnOpenPhrasesFile" Grid.Column="0"
+                                            Content="编辑"
+                                            Style="{StaticResource FluentSecondaryButton}"
+                                            Height="26"
+                                            Click="BtnOpenPhrasesFile_Click"/>
+                                    <Button x:Name="BtnResetPhrases" Grid.Column="2"
+                                            Content="重置"
+                                            Style="{StaticResource FluentSecondaryButton}"
+                                            Height="26"
+                                            Click="BtnResetPhrases_Click"/>
+                                </Grid>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ══════════════════════════════════════════
+                         分组 3：剪贴板 (Clipboard)
+                    ══════════════════════════════════════════ -->
+                    <TextBlock Text="剪贴板 (Clipboard)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,6,0,6"/>
                     <Border Style="{StaticResource PreferencesCard}">
                         <StackPanel>
                             <!-- 唤出剪贴板快捷键 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -152,14 +223,13 @@
                                     <TextBlock Text="默认：Win + V" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBox x:Name="HkClipboard" Grid.Column="1"
-                                         Style="{StaticResource InlineTextBox}"
+                                         Style="{StaticResource HotkeyInputBox}"
                                          IsReadOnly="True"
                                          GotFocus="HotkeyBox_GotFocus"
                                          LostFocus="HotkeyBox_LostFocus"
                                          PreviewKeyDown="HotkeyBox_PreviewKeyDown"
                                          Tag="HotkeyClipboardToggle"
-                                         Cursor="Hand"
-                                         ToolTip="点击此处，然后按下目标快捷键"/>
+                                         Cursor="Hand"/>
                             </Grid>
 
                             <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
@@ -206,11 +276,11 @@
                             <!-- 剪贴板历史保留条数 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="历史记录保留条数" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="文本记录保留条数" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
                                     <TextBlock Text="超限自动折半清理" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <ComboBox x:Name="CmbPasteMaxItems" Grid.Column="1"
@@ -222,19 +292,62 @@
                                     <ComboBoxItem Content="500 条" Tag="500"/>
                                 </ComboBox>
                             </Grid>
+
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
+
+                            <!-- 图片历史保留天数 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="图片历史保留天数" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="过期自动清理" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <ComboBox x:Name="CmbImageRetentionDays" Grid.Column="1"
+                                          Style="{StaticResource FluentComboBox}">
+                                    <ComboBoxItem Content="7 天" Tag="7"/>
+                                    <ComboBoxItem Content="15 天 (默认)" Tag="15"/>
+                                    <ComboBoxItem Content="30 天" Tag="30"/>
+                                    <ComboBoxItem Content="60 天" Tag="60"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
+
+                            <!-- 图片缓存空间上限 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="图片最大存储空间" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="超限自动折半清理" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <ComboBox x:Name="CmbImageMaxStorage" Grid.Column="1"
+                                          Style="{StaticResource FluentComboBox}">
+                                    <ComboBoxItem Content="50 MB" Tag="50"/>
+                                    <ComboBoxItem Content="100 MB (默认)" Tag="100"/>
+                                    <ComboBoxItem Content="200 MB" Tag="200"/>
+                                    <ComboBoxItem Content="500 MB" Tag="500"/>
+                                    <ComboBoxItem Content="1024 MB (1GB)" Tag="1024"/>
+                                </ComboBox>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
                     <!-- ══════════════════════════════════════════
-                         分组 3：常规与外观 (General)
+                         分组 4：常规与外观 (General)
                     ══════════════════════════════════════════ -->
-                    <TextBlock Text="常规与外观 (General)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,2,0,6"/>
+                    <TextBlock Text="常规与外观 (General)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Margin="2,6,0,6"/>
                     <Border Style="{StaticResource PreferencesCard}">
                         <StackPanel>
                             <!-- 颜色主题模式 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -255,7 +368,7 @@
                             <!-- 窗口不透明度 -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="145"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="窗口不透明度" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}" VerticalAlignment="Center"/>
@@ -296,12 +409,14 @@
 
                     <Button Content="恢复默认"
                             Width="80"
+                            Height="26"
                             Margin="0,0,10,0"
                             Style="{StaticResource FluentSecondaryButton}"
                             Click="ResetBtn_Click"/>
 
                     <Button Content="保 存"
                             Width="80"
+                            Height="26"
                             Style="{StaticResource FluentPrimaryButton}"
                             Click="SaveBtn_Click"/>
                 </StackPanel>
