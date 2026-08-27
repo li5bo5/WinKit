@@ -116,6 +116,22 @@
 
                             <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 
+                            <!-- 穿透模式 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="穿透模式" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="启用后待办窗口完全穿透鼠标点击，只看不可点" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkTodoPassThrough" Grid.Column="1"
+                                          Style="{StaticResource FluentCheckBox}"/>
+                            </Grid>
+
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
+
                             <!-- 双击托盘唤出 TodoList -->
                             <Grid Margin="0,3">
                                 <Grid.ColumnDefinitions>
