@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using WinKit.Common;
+using WinKit.Clipboard.Services;
 using WpfTextBox = System.Windows.Controls.TextBox;
 using Application = System.Windows.Application;
 
@@ -45,17 +46,23 @@ namespace WinKit.Common
                 // 1. TodoList
                 HkTodoTop.Text = s.HotkeyTodoTopToggle;
                 HkSaveExit.Text = s.HotkeyTodoSaveAndExit;
+                ChkTodoExpandedDisplay.IsChecked = s.TodoExpandedDisplay;
                 ChkTrayDoubleClick.IsChecked = s.TrayDoubleClickTodoEnabled;
                 SelectComboByTag(CmbRetentionDays, s.RecycleBinRetentionDays, 1); // 默认 60 天
 
-                // 2. Clipboard
+                // 2. Quick Phrases
+                ChkQuickPhrase.IsChecked = s.QuickPhraseEnabled;
+
+                // 3. Clipboard
                 HkClipboard.Text = s.HotkeyClipboardToggle;
                 ChkPasteMonitoring.IsChecked = s.PasteEnableMonitoring;
                 ChkPasteDedup.IsChecked = s.PasteEnableTextDeduplication;
                 ChkPasteRememberScroll.IsChecked = s.PasteRememberScrollPosition;
                 SelectComboByTag(CmbPasteMaxItems, s.PasteMaxItems, 2); // 默认 300 条
+                SelectComboByTag(CmbImageRetentionDays, s.ClipboardImageRetentionDays, 1); // 默认 15 天
+                SelectComboByTag(CmbImageMaxStorage, s.ClipboardImageMaxStorageMB, 1); // 默认 100 MB
 
-                // 3. General
+                // 4. General
                 SelectComboByStringTag(CmbThemeMode, s.ThemeMode ?? "System", 0); // 默认跟随系统
                 SelectComboByTag(CmbOpacity, s.WindowOpacity, 5); // 默认 100%
                 ChkAutoStart.IsChecked = AutoStartHelper.IsAutoStartEnabled();
@@ -129,6 +136,41 @@ namespace WinKit.Common
         }
 
         // ══════════════════════════════════════════════
+        // 常用短语文件与重置操作
+        // ══════════════════════════════════════════════
+        private void BtnOpenPhrasesFile_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                AppPaths.EnsureDirectories();
+                if (!System.IO.File.Exists(AppPaths.Phrases))
+                {
+                    QuickPhraseManager.ResetToDefaultPhrases();
+                }
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = AppPaths.Phrases,
+                    UseShellExecute = true
+                };
+                System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"打开常用短语文件失败：{ex.Message}", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void BtnResetPhrases_Click(object sender, RoutedEventArgs e)
+        {
+            if (System.Windows.MessageBox.Show("确定恢复默认常用短语吗？此操作将覆盖当前的短语文件。", "确认重置",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                QuickPhraseManager.ResetToDefaultPhrases();
+                System.Windows.MessageBox.Show("已成功恢复默认常用短语！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        // ══════════════════════════════════════════════
         // 快捷键输入框：获得焦点 -> 进入捕获状态
         // ══════════════════════════════════════════════
         private void HotkeyBox_GotFocus(object sender, RoutedEventArgs e)
@@ -162,77 +204,39 @@ namespace WinKit.Common
         private void HotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (_capturingBox == null) return;
-
             e.Handled = true;
 
             var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+            // 纯修饰键按下时忽略
             if (key == Key.LeftCtrl || key == Key.RightCtrl ||
                 key == Key.LeftAlt  || key == Key.RightAlt  ||
                 key == Key.LeftShift|| key == Key.RightShift||
-                key == Key.LWin     || key == Key.RWin      ||
-                key == Key.Tab)
+                key == Key.LWin     || key == Key.RWin)
             {
                 return;
             }
 
-            // Esc：取消捕获并恢复原值
+            // Esc 取消录入
             if (key == Key.Escape)
             {
                 LoadFromSettings();
-                _capturingBox.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ThemeTextPrimaryBrush"];
-                Keyboard.ClearFocus();
-                _capturingBox = null;
-                SetHookCapturing(false);
+                _capturingBox.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
                 return;
             }
 
+            // 组合键字符串构建
             var sb = new StringBuilder();
             if ((Keyboard.Modifiers & ModifierKeys.Windows) != 0) sb.Append("Win+");
             if ((Keyboard.Modifiers & ModifierKeys.Control) != 0) sb.Append("Ctrl+");
             if ((Keyboard.Modifiers & ModifierKeys.Alt)     != 0) sb.Append("Alt+");
             if ((Keyboard.Modifiers & ModifierKeys.Shift)   != 0) sb.Append("Shift+");
-            sb.Append(KeyToString(key));
 
+            sb.Append(key.ToString());
             _capturingBox.Text = sb.ToString();
             _capturingBox.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ThemeTextPrimaryBrush"];
-            Keyboard.ClearFocus();
-            _capturingBox = null;
-            SetHookCapturing(false);
+            _capturingBox.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
         }
-
-        private static string KeyToString(Key key) => key switch
-        {
-            >= Key.A and <= Key.Z => ((char)('A' + (key - Key.A))).ToString(),
-            >= Key.F1 and <= Key.F12 => $"F{key - Key.F1 + 1}",
-            Key.D0 or Key.NumPad0 => "0",
-            Key.D1 or Key.NumPad1 => "1",
-            Key.D2 or Key.NumPad2 => "2",
-            Key.D3 or Key.NumPad3 => "3",
-            Key.D4 or Key.NumPad4 => "4",
-            Key.D5 or Key.NumPad5 => "5",
-            Key.D6 or Key.NumPad6 => "6",
-            Key.D7 or Key.NumPad7 => "7",
-            Key.D8 or Key.NumPad8 => "8",
-            Key.D9 or Key.NumPad9 => "9",
-            Key.OemTilde          => "`",
-            Key.OemMinus          => "-",
-            Key.OemPlus           => "=",
-            Key.OemOpenBrackets   => "[",
-            Key.Oem6              => "]",
-            Key.OemSemicolon      => ";",
-            Key.OemQuotes         => "'",
-            Key.OemComma          => ",",
-            Key.OemPeriod         => ".",
-            Key.OemQuestion       => "/",
-            Key.Back              => "BackSpace",
-            Key.Delete            => "Delete",
-            Key.Home              => "Home",
-            Key.End               => "End",
-            Key.PageUp            => "PageUp",
-            Key.PageDown          => "PageDown",
-            Key.Space             => "Space",
-            _                     => key.ToString()
-        };
 
         // ══════════════════════════════════════════════
         // 全局 Esc：关闭偏好设置窗口
@@ -258,6 +262,7 @@ namespace WinKit.Common
             // 1. TodoList
             settings.HotkeyTodoTopToggle        = HkTodoTop.Text.Trim();
             settings.HotkeyTodoSaveAndExit      = HkSaveExit.Text.Trim();
+            settings.TodoExpandedDisplay        = ChkTodoExpandedDisplay.IsChecked ?? false;
             settings.TrayDoubleClickTodoEnabled = ChkTrayDoubleClick.IsChecked ?? true;
 
             if (CmbRetentionDays.SelectedItem is ComboBoxItem retItem &&
@@ -266,7 +271,10 @@ namespace WinKit.Common
                 settings.RecycleBinRetentionDays = retDays;
             }
 
-            // 2. Clipboard
+            // 2. Quick Phrases
+            settings.QuickPhraseEnabled = ChkQuickPhrase.IsChecked ?? true;
+
+            // 3. Clipboard
             settings.HotkeyClipboardToggle         = HkClipboard.Text.Trim();
             settings.PasteEnableMonitoring         = ChkPasteMonitoring.IsChecked ?? true;
             settings.PasteEnableTextDeduplication  = ChkPasteDedup.IsChecked ?? true;
@@ -278,7 +286,19 @@ namespace WinKit.Common
                 settings.PasteMaxItems = maxVal;
             }
 
-            // 3. General
+            if (CmbImageRetentionDays.SelectedItem is ComboBoxItem imgRetItem &&
+                int.TryParse(imgRetItem.Tag?.ToString(), out int imgRetDays))
+            {
+                settings.ClipboardImageRetentionDays = imgRetDays;
+            }
+
+            if (CmbImageMaxStorage.SelectedItem is ComboBoxItem imgStorageItem &&
+                int.TryParse(imgStorageItem.Tag?.ToString(), out int imgMaxMB))
+            {
+                settings.ClipboardImageMaxStorageMB = imgMaxMB;
+            }
+
+            // 4. General
             if (CmbThemeMode.SelectedItem is ComboBoxItem themeItem)
             {
                 settings.ThemeMode = themeItem.Tag?.ToString() ?? "System";
@@ -311,12 +331,16 @@ namespace WinKit.Common
             settings.HotkeyTodoTopToggle           = "Ctrl+D";
             settings.HotkeyClipboardToggle         = "Win+V";
             settings.HotkeyTodoSaveAndExit         = "Ctrl+S";
+            settings.TodoExpandedDisplay           = false;
             settings.TrayDoubleClickTodoEnabled    = true;
             settings.RecycleBinRetentionDays       = 60;
+            settings.QuickPhraseEnabled            = true;
             settings.PasteEnableMonitoring         = true;
             settings.PasteEnableTextDeduplication  = true;
             settings.PasteRememberScrollPosition   = false;
             settings.PasteMaxItems                 = 300;
+            settings.ClipboardImageRetentionDays   = 15;
+            settings.ClipboardImageMaxStorageMB    = 100;
             settings.ThemeMode                     = "System";
             settings.WindowOpacity                 = 100;
 
@@ -334,6 +358,9 @@ namespace WinKit.Common
             ThemeManager.ApplyTheme();
             Hide();
         }
+
+        private void TitleBar_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e) => CloseBtn.Opacity = 1;
+        private void TitleBar_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e) => CloseBtn.Opacity = 0;
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {

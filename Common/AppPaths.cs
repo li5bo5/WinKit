@@ -31,9 +31,24 @@ namespace WinKit.Common
         public static readonly string Clipboard = Path.Combine(AppData, "clipboard.jsonl");
 
         /// <summary>
-        /// 统一配置文件路径 (settings.json)
+        /// 常用短语明文保存路径 (phrases.jsonl)
         /// </summary>
-        public static readonly string Settings = Path.Combine(AppData, "settings.json");
+        public static readonly string Phrases = Path.Combine(AppData, "phrases.jsonl");
+
+        /// <summary>
+        /// 剪贴板原图保存目录 (Data/clipboard/images)
+        /// </summary>
+        public static readonly string ClipboardImagesDir = Path.Combine(AppData, "clipboard", "images");
+
+        /// <summary>
+        /// 剪贴板缩略图保存目录 (Data/clipboard/thumbnails)
+        /// </summary>
+        public static readonly string ClipboardThumbnailsDir = Path.Combine(AppData, "clipboard", "thumbnails");
+
+        /// <summary>
+        /// 统一配置文件路径 (settings.jsonl)
+        /// </summary>
+        public static readonly string Settings = Path.Combine(AppData, "settings.jsonl");
 
         /// <summary>
         /// 确保数据存放目录存在
@@ -43,6 +58,14 @@ namespace WinKit.Common
             if (!Directory.Exists(AppData))
             {
                 Directory.CreateDirectory(AppData);
+            }
+            if (!Directory.Exists(ClipboardImagesDir))
+            {
+                Directory.CreateDirectory(ClipboardImagesDir);
+            }
+            if (!Directory.Exists(ClipboardThumbnailsDir))
+            {
+                Directory.CreateDirectory(ClipboardThumbnailsDir);
             }
         }
     }

@@ -23,7 +23,7 @@
             <!-- 应用名 & 版本 -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
                 <TextBlock Text="WinKit" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
-                <TextBlock x:Name="VersionText" Text="v2.4" FontSize="12" Foreground="{DynamicResource ThemeTextSecondaryBrush}" Margin="6,0,0,2" VerticalAlignment="Bottom"/>
+                <TextBlock x:Name="VersionText" Text="v2.5" FontSize="12" Foreground="{DynamicResource ThemeTextSecondaryBrush}" Margin="6,0,0,2" VerticalAlignment="Bottom"/>
             </StackPanel>
 
             <!-- 信息表格 -->
@@ -56,7 +56,7 @@
                            MouseLeftButtonDown="LinkText_MouseLeftButtonDown"/>
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="开源协议:" Foreground="{DynamicResource ThemeTextSecondaryBrush}" FontSize="12" HorizontalAlignment="Right"/>
-                <TextBlock Grid.Row="4" Grid.Column="2" Text="AGPL-3.0" ToolTip="GNU Affero General Public License v3.0" Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="AGPL-3.0" Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontSize="12" FontWeight="SemiBold"/>
             </Grid>
 
             <!-- 底部：版权与提示 -->
