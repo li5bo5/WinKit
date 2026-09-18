@@ -186,6 +186,7 @@ namespace WinKit.Clipboard.Services
         private long _lastVKeyDownTicks = 0;
         private bool _vKeyWasReleased = true;
         private readonly uint _currentProcessId = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+        private const int VV_INTERVAL_THRESHOLD_MS = 350; // 常用短语 vv 连击判定时间阈值 (350ms)
 
         // ── Win32 常量 ─────────────────────────────────────────────────
         private const int WH_KEYBOARD_LL = 13;
@@ -431,7 +432,7 @@ namespace WinKit.Clipboard.Services
                                 long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                                 long interval = now - _lastVKeyDownTicks;
 
-                                if (interval > 0 && interval <= 500)
+                                if (interval > 0 && interval <= VV_INTERVAL_THRESHOLD_MS)
                                 {
                                     _lastVKeyDownTicks = 0;
 
@@ -443,12 +444,9 @@ namespace WinKit.Clipboard.Services
                                     {
                                         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                                         {
-                                            // 退格键擦除拼音流中的 "vv"（绝不发送 Esc，彻底避免微信窗口最小化或输入框失焦）
-                                            keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
-                                            System.Threading.Thread.Sleep(15);
-                                            keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                                            System.Threading.Thread.Sleep(20);
-
+                                            // 退格键擦除拼音流中的第一个 "v"
+                                            // 注意：由于我们在当前钩子中直接拦截了第二个物理 v，系统和输入法中自始至终只有 1 个 v！
+                                            // 仅模拟 1 次 Backspace 即可 100% 精准清空，彻底根治时序竞态导致的残存 "v" 问题。
                                             keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
                                             System.Threading.Thread.Sleep(15);
                                             keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
@@ -460,6 +458,9 @@ namespace WinKit.Clipboard.Services
                                                 QuickPhraseTriggered?.Invoke(fgWnd);
                                             }));
                                         });
+
+                                        // 核心拦截：直接吃掉第二个物理 v，阻止其分发到前台窗口
+                                        return (IntPtr)1;
                                     }
                                 }
                                 else

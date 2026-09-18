@@ -95,6 +95,18 @@ namespace WinKit.Common
                     todoWin.IsPreferencesWindowOpen = _preferencesWindow.IsVisible;
                 }
             };
+            _preferencesWindow.ResetTodoBoundsRequested += () =>
+            {
+                if (_todoWindow is Todo.MainWindow todoWin)
+                {
+                    todoWin.ResetToDefaultPosition(true);
+                    if (!todoWin.IsVisible)
+                    {
+                        todoWin.Show();
+                    }
+                    todoWin.Activate();
+                }
+            };
             _preferencesWindow.Show();
             _preferencesWindow.Hide();
 

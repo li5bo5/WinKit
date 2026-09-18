@@ -42,8 +42,10 @@ namespace WinKit.Common
         public const byte VK_SHIFT = 0x10;
         public const byte VK_ESCAPE = 0x1B;
         public const byte VK_BACK = 0x08;
+        public const byte VK_RETURN = 0x0D;
 
         public const uint KEYEVENTF_KEYUP = 0x0002;
+        public const uint KEYEVENTF_UNICODE = 0x0004;
         public const int LLKHF_INJECTED = 0x0010;
 
         public const int INPUT_KEYBOARD = 1;
@@ -475,6 +477,95 @@ namespace WinKit.Common
 
             // 3. Ctrl Up
             keybd_event((byte)VK_CTRL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
+        /// <summary>
+        /// 使用 Windows 原生 SendInput 机制向当前焦点窗口直接注入 Unicode 字符串
+        /// 全程不经过系统剪贴板，不修改剪贴板历史，支持中文、Emoji 及换行 (Shift+Enter 安全换行防误发)
+        /// </summary>
+        public static void SendUnicodeString(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+
+            // 1. 确保物理修饰键全部释放，防止产生按键干扰
+            keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_RWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_CTRL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_ALT,  0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+            int inputSize = Marshal.SizeOf(typeof(INPUT));
+            var inputs = new System.Collections.Generic.List<INPUT>();
+
+            // 统一换行符为 \n
+            string normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+
+            for (int i = 0; i < normalized.Length; i++)
+            {
+                char c = normalized[i];
+
+                if (c == '\n')
+                {
+                    // 提交之前缓存的字符
+                    if (inputs.Count > 0)
+                    {
+                        SendInput((uint)inputs.Count, inputs.ToArray(), inputSize);
+                        inputs.Clear();
+                    }
+
+                    // 关键：以 Shift + Enter 模拟换行，防止在微信/QQ等即时通讯工具中把消息误发出去
+                    var shiftDown = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_SHIFT } } };
+                    var enterDown = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RETURN } } };
+                    var enterUp   = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RETURN, dwFlags = KEYEVENTF_KEYUP } } };
+                    var shiftUp   = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_SHIFT, dwFlags = KEYEVENTF_KEYUP } } };
+
+                    SendInput(4, new[] { shiftDown, enterDown, enterUp, shiftUp }, inputSize);
+                    System.Threading.Thread.Sleep(5);
+                }
+                else
+                {
+                    // Unicode 字符按下 (KeyDown)
+                    inputs.Add(new INPUT
+                    {
+                        type = INPUT_KEYBOARD,
+                        u = new InputUnion
+                        {
+                            ki = new KEYBDINPUT
+                            {
+                                wVk = 0,
+                                wScan = c,
+                                dwFlags = KEYEVENTF_UNICODE
+                            }
+                        }
+                    });
+                    // Unicode 字符释放 (KeyUp)
+                    inputs.Add(new INPUT
+                    {
+                        type = INPUT_KEYBOARD,
+                        u = new InputUnion
+                        {
+                            ki = new KEYBDINPUT
+                            {
+                                wVk = 0,
+                                wScan = c,
+                                dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
+                            }
+                        }
+                    });
+
+                    // 达到 100 个字符刷新一次，避免单次塞满宿主队列
+                    if (inputs.Count >= 100)
+                    {
+                        SendInput((uint)inputs.Count, inputs.ToArray(), inputSize);
+                        inputs.Clear();
+                        System.Threading.Thread.Sleep(5);
+                    }
+                }
+            }
+
+            if (inputs.Count > 0)
+            {
+                SendInput((uint)inputs.Count, inputs.ToArray(), inputSize);
+            }
         }
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]

@@ -218,7 +218,7 @@ namespace WinKit.Clipboard
         }
 
         /// <summary>
-        /// 回填选中的短语并保持在系统剪贴板中
+        /// 原生直接输入选中的短语（完全不经过系统剪贴板，零污染）
         /// </summary>
         private async void UseSelectedPhrase(QuickPhraseItem item)
         {
@@ -226,37 +226,11 @@ namespace WinKit.Clipboard
 
             try
             {
-                // 开启内部主动回填锁，防止被自身监控误判
-                _clipboardService.BeginInternalPaste();
-
-                // 1. 设置剪贴板监控自回填忽略标记
-                _clipboardService.NotifyUpcomingSelfPaste(item.Content);
-
-                // 2. 写入系统剪贴板（重试保护）
-                bool setOk = false;
-                for (int i = 0; i < 3 && !setOk; i++)
-                {
-                    try
-                    {
-                        System.Windows.Clipboard.SetText(item.Content);
-                        setOk = true;
-                    }
-                    catch
-                    {
-                        await Task.Delay(30);
-                    }
-                }
-                if (!setOk) return;
-
-                // 3. 记录本次写入后系统产生的最新序列号
-                uint seq = NativeMethods.GetClipboardSequenceNumber();
-                _clipboardService.RegisterSelfPasteSequence(seq, item.Content);
-
-                // 4. 隐藏短语窗口
+                // 1. 隐藏短语窗口
                 Hide();
                 await Task.Delay(50);
 
-                // 5. 焦点精准归还给前台目标窗口
+                // 2. 焦点精准归还给前台目标窗口
                 if (_lastTargetHwnd != IntPtr.Zero && IsWindow(_lastTargetHwnd))
                 {
                     NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
@@ -267,16 +241,12 @@ namespace WinKit.Clipboard
                     await Task.Delay(40);
                 }
 
-                // 6. 模拟 Ctrl+V 粘贴
-                NativeMethods.SimulateCtrlV();
+                // 3. 原生直接注入文本（完全不接触系统剪贴板，安全换行防误发）
+                NativeMethods.SendUnicodeString(item.Content);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"QuickPhrase: 回填短语失败 ({ex.Message})");
-            }
-            finally
-            {
-                _clipboardService.EndInternalPaste();
+                System.Diagnostics.Debug.WriteLine($"QuickPhrase: 直接输入短语失败 ({ex.Message})");
             }
         }
 

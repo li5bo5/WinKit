@@ -16,6 +16,14 @@ namespace WinKit.Common
         public bool TrayDoubleClickTodoEnabled { get; set; } = true;
         /// <summary>待办历史记录保留天数，默认 60 天，超过自动清理</summary>
         public int RecycleBinRetentionDays { get; set; } = 60;
+        /// <summary>记录的 Todo 窗口 X 坐标（WPF 逻辑像素，null 表示未记录或使用默认值）</summary>
+        public double? TodoWindowLeft { get; set; } = null;
+        /// <summary>记录的 Todo 窗口 Y 坐标（WPF 逻辑像素，null 表示未记录或使用默认值）</summary>
+        public double? TodoWindowTop { get; set; } = null;
+        /// <summary>记录的 Todo 窗口宽度（WPF 逻辑像素，null 表示未记录或使用默认值）</summary>
+        public double? TodoWindowWidth { get; set; } = null;
+        /// <summary>记录的 Todo 窗口高度（WPF 逻辑像素，null 表示未记录或使用默认值）</summary>
+        public double? TodoWindowHeight { get; set; } = null;
 
         // ── Quick Phrases 常用短语设置 ──────────────────
         /// <summary>是否启用连续输入 vv 呼出常用短语</summary>

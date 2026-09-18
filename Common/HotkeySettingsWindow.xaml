@@ -166,6 +166,25 @@
                                     <ComboBoxItem Content="180 天" Tag="180"/>
                                 </ComboBox>
                             </Grid>
+
+                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
+
+                            <!-- 重置窗口布局与位置 -->
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="重置待办窗口布局" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="恢复默认大小并对齐至主屏幕右上角" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                </StackPanel>
+                                <Button x:Name="BtnResetTodoBounds" Grid.Column="1"
+                                        Content="重置布局"
+                                        Width="70" Height="24"
+                                        Style="{StaticResource FluentSecondaryButton}"
+                                        Click="BtnResetTodoBounds_Click"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 

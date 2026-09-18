@@ -25,6 +25,9 @@ namespace WinKit.Common
         // 用于通知 App 重新加载快捷键与配置的回调
         public event Action? HotkeysChanged;
 
+        // 请求重置待办窗口位置与大小的回调
+        public event Action? ResetTodoBoundsRequested;
+
         public HotkeySettingsWindow(SettingsManager settingsManager)
         {
             InitializeComponent();
@@ -352,6 +355,10 @@ namespace WinKit.Common
             settings.ClipboardImageMaxStorageMB    = 100;
             settings.ThemeMode                     = "System";
             settings.WindowOpacity                 = 100;
+            settings.TodoWindowLeft                = null;
+            settings.TodoWindowTop                 = null;
+            settings.TodoWindowWidth               = null;
+            settings.TodoWindowHeight              = null;
 
             _settingsManager.SaveSettings(settings);
             AutoStartHelper.SetAutoStart(true);
@@ -359,6 +366,26 @@ namespace WinKit.Common
             LoadFromSettings();
             ThemeManager.ApplyTheme(); // 恢复默认主题
             HotkeysChanged?.Invoke();
+            ResetTodoBoundsRequested?.Invoke();
+        }
+
+        private void BtnResetTodoBounds_Click(object sender, RoutedEventArgs e)
+        {
+            ResetTodoBoundsRequested?.Invoke();
+            if (BtnResetTodoBounds != null)
+            {
+                var originalText = BtnResetTodoBounds.Content;
+                BtnResetTodoBounds.Content = "已重置";
+                BtnResetTodoBounds.IsEnabled = false;
+                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+                timer.Tick += (s, args) =>
+                {
+                    timer.Stop();
+                    BtnResetTodoBounds.Content = originalText;
+                    BtnResetTodoBounds.IsEnabled = true;
+                };
+                timer.Start();
+            }
         }
 
         private void CancelAndClose()

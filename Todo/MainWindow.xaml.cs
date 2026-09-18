@@ -119,11 +119,8 @@ namespace WinKit.Todo
             // 订阅状态变化：免疫 Win+D 强制最小化
             StateChanged += MainWindow_StateChanged;
 
-            // 初始位置：右上角
-            var area = SystemParameters.WorkArea;
-            Left   = area.Right - Width - 20;
-            Height = Width * 1.3;
-            Top    = area.Top + 20;
+            // 初始化或恢复保存的窗口位置与大小
+            ApplyInitialOrSavedBounds();
 
             // 载入并应用保存的设置
             LoadSettings();
@@ -277,7 +274,11 @@ namespace WinKit.Todo
         // ══════════════════════════════════════════════
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 1) DragMove();
+            if (e.ClickCount == 1)
+            {
+                DragMove();
+                SaveWindowBounds();
+            }
         }
 
         // ══════════════════════════════════════════════
@@ -422,6 +423,7 @@ namespace WinKit.Todo
             ((UIElement)sender).ReleaseMouseCapture();
             ((UIElement)sender).MouseMove        -= ResizeGrip_MouseMove;
             ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
+            SaveWindowBounds();
         }
 
         // ══════════════════════════════════════════════
@@ -678,8 +680,112 @@ namespace WinKit.Todo
             SaveSettings();
         }
 
+        // ══════════════════════════════════════════════
+        // 窗口大小与位置记忆 / 恢复 / 越界保护
+        // ══════════════════════════════════════════════
+        private void ApplyInitialOrSavedBounds()
+        {
+            var settings = _settingsManager.Settings;
+            if (settings.TodoWindowLeft.HasValue &&
+                settings.TodoWindowTop.HasValue &&
+                settings.TodoWindowWidth.HasValue &&
+                settings.TodoWindowHeight.HasValue)
+            {
+                double savedLeft   = settings.TodoWindowLeft.Value;
+                double savedTop    = settings.TodoWindowTop.Value;
+                double savedWidth  = Math.Max(MinWidth, settings.TodoWindowWidth.Value);
+                double savedHeight = Math.Max(MinHeight, settings.TodoWindowHeight.Value);
+
+                if (IsWindowBoundsVisible(savedLeft, savedTop, savedWidth, savedHeight))
+                {
+                    Width  = savedWidth;
+                    Height = savedHeight;
+                    Left   = savedLeft;
+                    Top    = savedTop;
+                    return;
+                }
+            }
+
+            // 首次启动或保存的坐标已在屏幕外（如外接显示器断开），恢复默认右上角
+            ResetToDefaultPosition(false);
+        }
+
+        private bool IsWindowBoundsVisible(double left, double top, double width, double height)
+        {
+            try
+            {
+                // 1. 全局虚拟屏幕碰撞检测（DIP 逻辑像素）
+                var virtualRect = new Rect(
+                    SystemParameters.VirtualScreenLeft,
+                    SystemParameters.VirtualScreenTop,
+                    SystemParameters.VirtualScreenWidth,
+                    SystemParameters.VirtualScreenHeight);
+
+                var winRect = new Rect(left, top, width, height);
+                winRect.Intersect(virtualRect);
+
+                // 窗口在可视区域内至少有 60x40 像素的有效面积（确保标题栏可点击）
+                if (winRect.IsEmpty || winRect.Width < 60 || winRect.Height < 40)
+                {
+                    return false;
+                }
+
+                // 2. 真实活动屏幕探测（针对多显示器异形布局盲区）
+                var probePoint = new System.Drawing.Point((int)left + 30, (int)top + 20);
+                var screen = System.Windows.Forms.Screen.FromPoint(probePoint);
+                if (screen != null && screen.Bounds.Contains(probePoint))
+                {
+                    return true;
+                }
+
+                var centerPoint = new System.Drawing.Point((int)(left + width / 2), (int)(top + height / 2));
+                var centerScreen = System.Windows.Forms.Screen.FromPoint(centerPoint);
+                if (centerScreen != null && centerScreen.Bounds.Contains(centerPoint))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        public void ResetToDefaultPosition(bool save = true)
+        {
+            var area = SystemParameters.WorkArea;
+            Width  = 280;
+            Height = Width * 1.3;
+            Left   = area.Right - Width - 20;
+            Top    = area.Top + 20;
+
+            if (save)
+            {
+                SaveWindowBounds();
+            }
+        }
+
+        public void SaveWindowBounds()
+        {
+            if (double.IsNaN(Left) || double.IsNaN(Top) || double.IsNaN(Width) || double.IsNaN(Height) ||
+                double.IsInfinity(Left) || double.IsInfinity(Top) || double.IsInfinity(Width) || double.IsInfinity(Height))
+            {
+                return;
+            }
+
+            var settings = _settingsManager.Settings;
+            settings.TodoWindowLeft   = Left;
+            settings.TodoWindowTop    = Top;
+            settings.TodoWindowWidth  = Math.Max(MinWidth, Width);
+            settings.TodoWindowHeight = Math.Max(MinHeight, Height);
+            _settingsManager.SaveSettings(settings);
+        }
+
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            SaveWindowBounds();
             if (App.IsExiting)
             {
                 base.OnClosing(e);

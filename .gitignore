@@ -1,11 +1,13 @@
 ## ── WinKit 项目专属与内部文档 (Project Specific & Docs) ──────
 /开发文档/
 /Publish_Releases/
+/scripts/
 
 ## ── 本地数据、用户配置与日志 (Local Data, Settings & Logs) ─
 /Data/
 settings.json
 todos.md
+AGENTS.md
 *.jsonl
 *.db
 *.db-shm
