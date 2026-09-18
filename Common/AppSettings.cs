@@ -39,6 +39,8 @@ namespace WinKit.Common
         public int ClipboardImageRetentionDays { get; set; } = 15;
         /// <summary>剪贴板图片最大缓存占用空间，默认 100MB (50~2048)</summary>
         public int ClipboardImageMaxStorageMB { get; set; } = 100;
+        /// <summary>剪贴板允许置顶的最大条目目数，默认 5 条 (1~20)</summary>
+        public int ClipboardMaxPinnedItems { get; set; } = 5;
 
         // ── 自定义快捷键设置 ────────────────────────────
         /// <summary>置顶显示快捷键（置顶时取消置顶，未置顶时置顶并取消穿透）</summary>

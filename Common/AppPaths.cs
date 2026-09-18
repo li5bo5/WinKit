@@ -51,6 +51,11 @@ namespace WinKit.Common
         public static readonly string Settings = Path.Combine(AppData, "settings.jsonl");
 
         /// <summary>
+        /// 全局异常崩溃日志路径 (crash.log)
+        /// </summary>
+        public static readonly string CrashLog = Path.Combine(AppData, "crash.log");
+
+        /// <summary>
         /// 确保数据存放目录存在
         /// </summary>
         public static void EnsureDirectories()

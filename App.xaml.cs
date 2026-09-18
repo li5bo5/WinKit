@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using WinKit.Clipboard;
 using WinKit.Clipboard.Models;
 using WinKit.Clipboard.Services;
@@ -11,6 +15,9 @@ namespace WinKit
 {
     public partial class App : System.Windows.Application
     {
+        public static bool IsExiting { get; set; } = false;
+        private static Mutex? _singleInstanceMutex;
+
         private SettingsManager?      _settingsManager;
         private ClipboardService?     _clipboardService;
         private ClipboardManager?     _clipboardManager;
@@ -30,6 +37,29 @@ namespace WinKit
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // 0. 全局未捕获异常守卫与日志记录
+            SetupExceptionHandling();
+            DispatcherUnhandledException += App_DispatcherUnhandledException;
+
+            // 0.1 系统级单实例互斥锁
+            const string mutexName = "WinKit_SingleInstance_Mutex_li5bo5";
+            _singleInstanceMutex = new Mutex(true, mutexName, out bool createdNew);
+            if (!createdNew)
+            {
+                // 加载配置以确保弹窗匹配用户的主题设置（浅色/深色）
+                try
+                {
+                    _settingsManager = new SettingsManager();
+                    ThemeManager.Initialize(_settingsManager);
+                }
+                catch { }
+
+                var alreadyRunningDialog = new Common.AlreadyRunningWindow();
+                alreadyRunningDialog.ShowDialog();
+                Shutdown();
+                return;
+            }
+
             base.OnStartup(e);
 
             // 1. 初始化统一配置管理器与全局主题引擎
@@ -183,6 +213,16 @@ namespace WinKit
 
         protected override void OnExit(ExitEventArgs e)
         {
+            IsExiting = true;
+
+            // 释放互斥体
+            if (_singleInstanceMutex != null)
+            {
+                try { _singleInstanceMutex.ReleaseMutex(); } catch { }
+                _singleInstanceMutex.Dispose();
+                _singleInstanceMutex = null;
+            }
+
             // 优雅释放所有非托管钩子和资源
             ThemeManager.Dispose();
             _keyboardHookService?.Dispose();
@@ -192,6 +232,47 @@ namespace WinKit
             _clipboardManager?.Dispose();
 
             base.OnExit(e);
+        }
+
+        private static void SetupExceptionHandling()
+        {
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                LogCrash("AppDomain.UnhandledException", e.ExceptionObject as Exception);
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                LogCrash("TaskScheduler.UnobservedTaskException", e.Exception);
+                e.SetObserved();
+            };
+        }
+
+        private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            LogCrash("DispatcherUnhandledException", e.Exception);
+            // 标记已处理，防止非致命 UI 异常直接导致主进程静默崩溃
+            e.Handled = true;
+        }
+
+        private static void LogCrash(string source, Exception? ex)
+        {
+            if (ex == null) return;
+            try
+            {
+                AppPaths.EnsureDirectories();
+                string content = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{source}] {ex.GetType().FullName}: {ex.Message}\r\n{ex.StackTrace}\r\n";
+                if (ex.InnerException != null)
+                {
+                    content += $"InnerException: {ex.InnerException.GetType().FullName}: {ex.InnerException.Message}\r\n{ex.InnerException.StackTrace}\r\n";
+                }
+                content += new string('-', 80) + "\r\n";
+                File.AppendAllText(AppPaths.CrashLog, content);
+            }
+            catch
+            {
+                // 静默保底
+            }
         }
     }
 }

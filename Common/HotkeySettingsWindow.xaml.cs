@@ -377,5 +377,16 @@ namespace WinKit.Common
         }
 
         private void CloseBtn_Click(object sender, RoutedEventArgs e) => CancelAndClose();
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (App.IsExiting)
+            {
+                base.OnClosing(e);
+                return;
+            }
+            e.Cancel = true;
+            CancelAndClose();
+        }
     }
 }

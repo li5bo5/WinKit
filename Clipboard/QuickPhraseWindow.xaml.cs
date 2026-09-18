@@ -195,9 +195,10 @@ namespace WinKit.Clipboard
             }
             else if (e.Key == Key.Up)
             {
-                int next = PhrasesList.SelectedIndex - 1;
-                if (next >= 0)
+                if (_phraseManager.Items.Count > 0)
                 {
+                    int next = PhrasesList.SelectedIndex - 1;
+                    if (next < 0) next = _phraseManager.Items.Count - 1;
                     PhrasesList.SelectedIndex = next;
                     PhrasesList.ScrollIntoView(PhrasesList.SelectedItem);
                 }
@@ -205,9 +206,10 @@ namespace WinKit.Clipboard
             }
             else if (e.Key == Key.Down)
             {
-                int next = PhrasesList.SelectedIndex + 1;
-                if (next < _phraseManager.Items.Count)
+                if (_phraseManager.Items.Count > 0)
                 {
+                    int next = PhrasesList.SelectedIndex + 1;
+                    if (next >= _phraseManager.Items.Count) next = 0;
                     PhrasesList.SelectedIndex = next;
                     PhrasesList.ScrollIntoView(PhrasesList.SelectedItem);
                 }
@@ -224,6 +226,9 @@ namespace WinKit.Clipboard
 
             try
             {
+                // 开启内部主动回填锁，防止被自身监控误判
+                _clipboardService.BeginInternalPaste();
+
                 // 1. 设置剪贴板监控自回填忽略标记
                 _clipboardService.NotifyUpcomingSelfPaste(item.Content);
 
@@ -251,15 +256,15 @@ namespace WinKit.Clipboard
                 Hide();
                 await Task.Delay(50);
 
-                // 5. 焦点归还给前台目标窗口
+                // 5. 焦点精准归还给前台目标窗口
                 if (_lastTargetHwnd != IntPtr.Zero && IsWindow(_lastTargetHwnd))
                 {
                     NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
-                    for (int wait = 0; wait < 6 && GetForegroundWindow() != _lastTargetHwnd; wait++)
+                    for (int wait = 0; wait < 8 && GetForegroundWindow() != _lastTargetHwnd; wait++)
                     {
                         await Task.Delay(30);
                     }
-                    await Task.Delay(30);
+                    await Task.Delay(40);
                 }
 
                 // 6. 模拟 Ctrl+V 粘贴
@@ -269,6 +274,21 @@ namespace WinKit.Clipboard
             {
                 System.Diagnostics.Debug.WriteLine($"QuickPhrase: 回填短语失败 ({ex.Message})");
             }
+            finally
+            {
+                _clipboardService.EndInternalPaste();
+            }
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (App.IsExiting)
+            {
+                base.OnClosing(e);
+                return;
+            }
+            e.Cancel = true;
+            Hide();
         }
 
         protected override void OnClosed(EventArgs e)

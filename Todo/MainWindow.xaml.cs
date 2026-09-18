@@ -32,7 +32,6 @@ namespace WinKit.Todo
         private readonly TodoService _todoService;
         private readonly RecycleBinService _recycleBinService;
         private readonly SettingsManager _settingsManager;
-        private bool _isUpdatingText = false;
 
         // 拖拽排序
         private WinPoint  _dragStart;
@@ -65,6 +64,8 @@ namespace WinKit.Todo
         public void SetTray(TrayHelper tray) => _tray = tray;
 
         private const int WM_MOVING = 0x0216;
+        private const int WM_SHOWWINDOW = 0x0018;
+        private const int SW_PARENTCLOSING = 3;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
@@ -115,6 +116,9 @@ namespace WinKit.Todo
             // 监听集合变化，同步空列表占位符
             _items.CollectionChanged += (s, e) => UpdateEmptyPlaceholder();
 
+            // 订阅状态变化：免疫 Win+D 强制最小化
+            StateChanged += MainWindow_StateChanged;
+
             // 初始位置：右上角
             var area = SystemParameters.WorkArea;
             Left   = area.Right - Width - 20;
@@ -153,6 +157,14 @@ namespace WinKit.Todo
             };
         }
 
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+        }
+
         // ══════════════════════════════════════════════
         // 窗口初始化：挂钩 WndProc 并注入 WS_EX_TOOLWINDOW
         // ══════════════════════════════════════════════
@@ -174,6 +186,25 @@ namespace WinKit.Todo
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            // 1. 免疫 Win + D（显示桌面）：拦截 SW_PARENTCLOSING
+            if (msg == WM_SHOWWINDOW && wParam == IntPtr.Zero && lParam.ToInt32() == SW_PARENTCLOSING)
+            {
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            // 2. 接收来自新进程的激活广播消息
+            if (msg == NativeMethods.WM_SHOW_EXISTING_INSTANCE)
+            {
+                if (!IsVisible) Show();
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Activate();
+                NativeMethods.ForceSetForegroundWindow(hwnd);
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            // 3. 限制窗口拖动在当前屏幕工作区内
             if (msg == WM_MOVING)
             {
                 // 获取当前鼠标所在的屏幕工作区（物理像素）
@@ -186,7 +217,6 @@ namespace WinKit.Todo
                 int width = rect.Right - rect.Left;
                 int height = rect.Bottom - rect.Top;
 
-                // 限制窗口范围在当前屏幕工作区内
                 if (rect.Left < area.Left)
                 {
                     rect.Left = area.Left;
@@ -232,7 +262,7 @@ namespace WinKit.Todo
 
         private void AddBtn_Click(object sender, RoutedEventArgs e)
         {
-            ShowInlineInput();
+            ShowCreateTodoDialog();
         }
 
         // ResizeGrip 区域悬停：控制 Grip 显示
@@ -395,15 +425,24 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // 窗口全局鼠标按下：处于输入状态时，任意位置双击（ClickCount>=2）均自动保存并退出
+        // 待办创建与编辑统一弹窗呼出
         // ══════════════════════════════════════════════
-        private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void ShowCreateTodoDialog()
         {
-            // 若内联输入框当前显示中——无论在窗口何处双击，一律保存并退出
-            if (InlineInputArea.Visibility == Visibility.Visible && e.ClickCount >= 2)
+            if (IsPreferencesWindowOpen) return;
+
+            var dlg = new EditDialog("新建待办", "") { Owner = this };
+            ActiveEditDialog = dlg;
+            try
             {
-                CommitInlineInput();
-                e.Handled = true;
+                if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultText))
+                {
+                    AddTodoItem(dlg.ResultText);
+                }
+            }
+            finally
+            {
+                ActiveEditDialog = null;
             }
         }
 
@@ -424,100 +463,23 @@ namespace WinKit.Todo
                 return;
             }
 
-            ShowInlineInput();
-        }
-
-        private void ShowInlineInput()
-        {
-            if (IsPreferencesWindowOpen) return;
-
-            InlineInputArea.Visibility = Visibility.Visible;
-            InlineEditBox.Text         = string.Empty;
-            InlineEditBox.Focus();
+            ShowCreateTodoDialog();
         }
 
         public void HideInlineInput()
         {
-            InlineInputArea.Visibility = Visibility.Collapsed;
-            InlineEditBox.Text         = string.Empty;
+            // 内联输入已全面统一为独立弹窗，保留此方法兼容外部托盘调用
+            if (ActiveEditDialog != null)
+            {
+                ActiveEditDialog.Close();
+                ActiveEditDialog = null;
+            }
         }
 
-        /// <summary>
-        /// 先收起内联输入框，然后隐藏 TodoList 主窗口
-        /// </summary>
         public void HideInlineInputAndWindow()
         {
             HideInlineInput();
             Hide();
-        }
-
-        private void InlineEditBox_PreviewKeyDown(object sender, WinKey e)
-        {
-            // Enter（无 Shift）：提交
-            if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
-            {
-                CommitInlineInput();
-                e.Handled = true;
-            }
-            // Win+S 或单独 Ctrl+S：保存并退出
-            else if (e.Key == Key.S &&
-                     ((Keyboard.Modifiers & ModifierKeys.Windows) != 0 ||
-                      (Keyboard.Modifiers & ModifierKeys.Control) != 0))
-            {
-                CommitInlineInput();
-                e.Handled = true;
-            }
-            // Esc：退出输入状态
-            else if (e.Key == Key.Escape)
-            {
-                HideInlineInput();
-                e.Handled = true;
-            }
-        }
-
-        private void InlineEditBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-        {
-            if (_isUpdatingText) return;
-            if (sender is System.Windows.Controls.TextBox textBox)
-            {
-                LimitTextVirtualLength(textBox);
-            }
-        }
-
-        private void LimitTextVirtualLength(System.Windows.Controls.TextBox textBox)
-        {
-            var text = textBox.Text;
-            var safeText = TextInputHelper.LimitTextVirtualLength(text, out bool isExceeded);
-            if (isExceeded)
-            {
-                _isUpdatingText = true;
-                int caret = Math.Min(textBox.CaretIndex, safeText.Length);
-                textBox.Text = safeText;
-                textBox.CaretIndex = caret;
-                _isUpdatingText = false;
-            }
-        }
-
-        private void InlineEditBox_LostFocus(object sender, RoutedEventArgs e)
-        {
-            // 若仍处于显示状态，失焦时自动保存提交，避免点击外部意外丢失输入内容
-            if (InlineInputArea.Visibility == Visibility.Visible)
-            {
-                CommitInlineInput();
-            }
-        }
-
-        private void CommitInlineInput()
-        {
-            var text = InlineEditBox.Text.Trim();
-            if (!string.IsNullOrEmpty(text))
-            {
-                _items.Add(new TodoItem { Title = text });
-                _todoService.SaveTodos(_items);
-                if (_items.Count > 0)
-                    TodoList.ScrollIntoView(_items[^1]);
-            }
-            HideInlineInput();
         }
 
         private void UpdateEmptyPlaceholder()
@@ -586,7 +548,7 @@ namespace WinKit.Todo
         {
             if (IsPreferencesWindowOpen) return;
 
-            var dlg = new EditDialog(item.Title) { Owner = this };
+            var dlg = new EditDialog("编辑待办", item.Title) { Owner = this };
             ActiveEditDialog = dlg;
             try
             {
@@ -714,6 +676,17 @@ namespace WinKit.Todo
             _tray?.SyncPinMenuItem();
             _tray?.SyncPassThroughMenuItem();
             SaveSettings();
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (App.IsExiting)
+            {
+                base.OnClosing(e);
+                return;
+            }
+            e.Cancel = true;
+            Hide();
         }
     }
 }

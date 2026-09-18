@@ -21,6 +21,7 @@ todos.md
 BundleArtifacts/
 _ReSharper*/
 Generated Files/
+*_wpftmp.*
 
 ## ── Visual Studio / MSBuild 临时文件与缓存 ────────────────
 .vs/

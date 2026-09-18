@@ -10,7 +10,6 @@
         Topmost="False"
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
-        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
         ResizeMode="NoResize">
 
     <!-- 主容器：圆角边框 + 动态主题磨砂背景 -->
@@ -91,7 +90,6 @@
             <Grid Grid.Row="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="14"/>
                 </Grid.RowDefinitions>
 
@@ -217,20 +215,8 @@
                                IsHitTestVisible="False"/>
                 </Grid>
 
-                <!-- 内联输入框（双击空白处触发，无字数限制） -->
-                <Border x:Name="InlineInputArea"
-                        Grid.Row="1"
-                        Visibility="Collapsed"
-                        Margin="10,0,10,4">
-                    <TextBox x:Name="InlineEditBox"
-                             Style="{StaticResource InlineTextBox}"
-                             PreviewKeyDown="InlineEditBox_PreviewKeyDown"
-                             LostFocus="InlineEditBox_LostFocus"
-                             TextChanged="InlineEditBox_TextChanged"/>
-                </Border>
-
                 <!-- 右下角自定义 ResizeGrip -->
-                <Grid Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                <Grid Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                     <Border x:Name="ResizeGripArea"
                             Width="14" Height="14"
                             Background="Transparent"

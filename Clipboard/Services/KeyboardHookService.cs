@@ -438,16 +438,21 @@ namespace WinKit.Clipboard.Services
                                     IntPtr fgWnd = NativeMethods.GetForegroundWindow();
                                     NativeMethods.GetWindowThreadProcessId(fgWnd, out uint fgPid);
 
-                                    // 仅当目标窗口不在本进程内、且当前键盘布局为中文输入法时才触发快捷短语
-                                    if (fgPid != _currentProcessId && fgWnd != IntPtr.Zero && NativeMethods.IsChineseKeyboardLayout(fgWnd))
+                                    // 仅在中文模式下触发 vv 快捷短语（若在英文打字、敲代码或 Shift 英文状态下，绝不触发弹窗）
+                                    if (fgPid != _currentProcessId && fgWnd != IntPtr.Zero && NativeMethods.IsChineseInputMode(fgWnd))
                                     {
                                         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                                         {
-                                            // 统一发送 Esc 冲刷掉输入法候选框或临时菜单
-                                            keybd_event((byte)VK_ESCAPE, 0, 0, UIntPtr.Zero);
+                                            // 退格键擦除拼音流中的 "vv"（绝不发送 Esc，彻底避免微信窗口最小化或输入框失焦）
+                                            keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
+                                            System.Threading.Thread.Sleep(15);
+                                            keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
                                             System.Threading.Thread.Sleep(20);
-                                            keybd_event((byte)VK_ESCAPE, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                                            System.Threading.Thread.Sleep(30);
+
+                                            keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
+                                            System.Threading.Thread.Sleep(15);
+                                            keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                                            System.Threading.Thread.Sleep(35);
 
                                             // 唤出常用短语窗口，传递 targetHwnd
                                             System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
@@ -459,7 +464,16 @@ namespace WinKit.Clipboard.Services
                                 }
                                 else
                                 {
-                                    _lastVKeyDownTicks = now;
+                                    // 仅当前台窗口处于中文输入状态时才记录第一个 v 的时间戳；英文状态直接忽略
+                                    IntPtr fgWnd = NativeMethods.GetForegroundWindow();
+                                    if (NativeMethods.IsChineseInputMode(fgWnd))
+                                    {
+                                        _lastVKeyDownTicks = now;
+                                    }
+                                    else
+                                    {
+                                        _lastVKeyDownTicks = 0;
+                                    }
                                 }
                             }
                         }

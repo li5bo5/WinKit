@@ -72,5 +72,16 @@ namespace WinKit.Common
                 System.Windows.MessageBox.Show($"无法打开链接: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (App.IsExiting)
+            {
+                base.OnClosing(e);
+                return;
+            }
+            e.Cancel = true;
+            Hide();
+        }
     }
 }

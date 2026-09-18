@@ -65,10 +65,15 @@ namespace WinKit.Todo
         private DateTime _lastClickTime = DateTime.MinValue;
         private POINT _lastClickPos;
 
-        public EditDialog(string currentText)
+        public EditDialog(string title = "编辑待办", string initialText = "")
         {
             InitializeComponent();
-            InputBox.Text = currentText;
+            if (DlgTitleText != null)
+            {
+                DlgTitleText.Text = title;
+            }
+            this.Title = title;
+            InputBox.Text = initialText;
             InputBox.SelectAll();
             InputBox.Focus();
 

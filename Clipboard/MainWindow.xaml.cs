@@ -293,6 +293,9 @@ namespace WinKit.Clipboard
 
             try
             {
+                // 开启内部主动回填锁，在此期间绝对不将剪贴板变化当作用户外部新复制
+                _clipboardService.BeginInternalPaste();
+
                 // 1. 设置自回填忽略通知并写入系统剪贴板
                 if (item.IsImage && !string.IsNullOrEmpty(item.ImagePath) && File.Exists(item.ImagePath))
                 {
@@ -351,7 +354,7 @@ namespace WinKit.Clipboard
                     await Task.Delay(50);
                 }
 
-                // 4. 精准归还前台焦点至目标输入窗口
+                // 3. 精准归还前台焦点至目标输入窗口
                 if (_lastTargetHwnd != IntPtr.Zero && IsWindow(_lastTargetHwnd))
                 {
                     NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
@@ -362,12 +365,16 @@ namespace WinKit.Clipboard
                     await Task.Delay(30);
                 }
 
-                // 5. 模拟 Ctrl+V 粘贴
+                // 4. 模拟 Ctrl+V 粘贴
                 NativeMethods.SimulateCtrlV();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Clipboard: 回填失败 ({ex.Message})");
+            }
+            finally
+            {
+                _clipboardService.EndInternalPaste();
             }
         }
 
@@ -430,10 +437,46 @@ namespace WinKit.Clipboard
         // ══════════════════════════════════════════════
         private void ClearAllButton_Click(object sender, RoutedEventArgs e)
         {
-            if (System.Windows.MessageBox.Show("确定清空全部剪贴板历史吗？此操作不可撤销。", "提示",
+            if (System.Windows.MessageBox.Show(this, "确定清空全部非置顶的剪贴板历史吗？此操作不可撤销。", "提示",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
                 _clipboardManager.ClearAll();
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // 取消全部置顶
+        // ══════════════════════════════════════════════
+        private void UnpinAllButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_clipboardManager.HasPinnedItems)
+            {
+                System.Windows.MessageBox.Show(this, "当前没有置顶的条目。", "提示",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (System.Windows.MessageBox.Show(this, "确定取消所有已置顶条目吗？", "提示",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                _clipboardManager.UnpinAll();
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // 置顶 / 取消置顶单项
+        // ══════════════════════════════════════════════
+        private void PinItemButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ClipboardItem item)
+            {
+                bool success = _clipboardManager.TogglePin(item);
+                if (!success)
+                {
+                    int maxPinned = _settingsManager.Settings.ClipboardMaxPinnedItems;
+                    System.Windows.MessageBox.Show(this, $"最多只能置顶 {maxPinned} 个条目", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                e.Handled = true;
             }
         }
 
@@ -441,7 +484,7 @@ namespace WinKit.Clipboard
         {
             while (obj != null)
             {
-                if (obj is Button btn && (btn.Name == "DeleteBtn" || btn.Name == "PreviewBtn")) return true;
+                if (obj is Button btn && (btn.Name == "DeleteBtn" || btn.Name == "PreviewBtn" || btn.Name == "PinItemBtn")) return true;
                 obj = System.Windows.Media.VisualTreeHelper.GetParent(obj);
             }
             return false;
@@ -477,6 +520,17 @@ namespace WinKit.Clipboard
             ((UIElement)sender).ReleaseMouseCapture();
             ((UIElement)sender).MouseMove        -= ResizeGrip_MouseMove;
             ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (App.IsExiting)
+            {
+                base.OnClosing(e);
+                return;
+            }
+            e.Cancel = true;
+            Hide();
         }
     }
 }
