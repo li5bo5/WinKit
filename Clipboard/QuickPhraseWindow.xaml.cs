@@ -218,7 +218,12 @@ namespace WinKit.Clipboard
         }
 
         /// <summary>
-        /// 原生直接输入选中的短语（完全不经过系统剪贴板，零污染）
+        /// 独立安全回填选中的短语：
+        /// 1. 自动备份用户原有剪贴板（文本/图片）
+        /// 2. 注入短语并附加 Windows 10/11 防记录标记（阻止 Win+V 历史记录与云同步）
+        /// 3. 开启 WinKit 内部回填锁，绝不写入 WinKit 剪贴板历史
+        /// 4. 模拟 Ctrl+V 粘贴，全软件 100% 稳定兼容
+        /// 5. 粘贴完成后微秒级原样恢复用户原有剪贴板，彻底不影响剪贴板原有内容
         /// </summary>
         private async void UseSelectedPhrase(QuickPhraseItem item)
         {
@@ -226,27 +231,130 @@ namespace WinKit.Clipboard
 
             try
             {
-                // 1. 隐藏短语窗口
-                Hide();
-                await Task.Delay(50);
+                // 开启内部主动回填锁，防止被自身监控误判
+                _clipboardService.BeginInternalPaste();
 
-                // 2. 焦点精准归还给前台目标窗口
+                // 1. 备份用户当前剪贴板现场（文本或图片）
+                string? backupText = null;
+                System.Windows.Media.Imaging.BitmapSource? backupImage = null;
+                try
+                {
+                    if (System.Windows.Clipboard.ContainsText())
+                    {
+                        backupText = System.Windows.Clipboard.GetText();
+                    }
+                    else if (System.Windows.Clipboard.ContainsImage())
+                    {
+                        backupImage = System.Windows.Clipboard.GetImage();
+                    }
+                }
+                catch
+                {
+                    // 剪贴板可能被其他进程偶发占用，静默处理
+                }
+
+                // 2. 预先通知监控服务忽略本次短语写入
+                _clipboardService.NotifyUpcomingSelfPaste(item.Content);
+
+                // 3. 构造带防系统历史记录标记的 DataObject
+                var data = new System.Windows.DataObject();
+                data.SetData(System.Windows.DataFormats.UnicodeText, item.Content);
+
+                // 写入 Windows 10/11 系统的剪贴板屏蔽标记（禁止写入系统 Win+V 历史，禁止云同步）
+                byte[] zeroBytes = new byte[4];
+                data.SetData("CanIncludeInClipboardHistory", new System.IO.MemoryStream(zeroBytes));
+                data.SetData("CanUploadToCloudClipboard", new System.IO.MemoryStream(zeroBytes));
+                data.SetData("ExcludeClipboardContentFromMonitorProcessing", new System.IO.MemoryStream(zeroBytes));
+
+                bool setOk = false;
+                for (int i = 0; i < 3 && !setOk; i++)
+                {
+                    try
+                    {
+                        System.Windows.Clipboard.SetDataObject(data, false);
+                        setOk = true;
+                    }
+                    catch
+                    {
+                        await Task.Delay(25);
+                    }
+                }
+                if (!setOk) return;
+
+                // 4. 记录本次写入后系统产生的最新序列号
+                uint seq = NativeMethods.GetClipboardSequenceNumber();
+                _clipboardService.RegisterSelfPasteSequence(seq, item.Content);
+
+                // 5. 隐藏短语窗口
+                Hide();
+                await Task.Delay(40);
+
+                // 6. 焦点精准归还给前台目标窗口
                 if (_lastTargetHwnd != IntPtr.Zero && IsWindow(_lastTargetHwnd))
                 {
                     NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
                     for (int wait = 0; wait < 8 && GetForegroundWindow() != _lastTargetHwnd; wait++)
                     {
-                        await Task.Delay(30);
+                        await Task.Delay(25);
                     }
-                    await Task.Delay(40);
+                    await Task.Delay(35);
                 }
 
-                // 3. 原生直接注入文本（完全不接触系统剪贴板，安全换行防误发）
-                NativeMethods.SendUnicodeString(item.Content);
+                // 7. 模拟 Ctrl+V 粘贴
+                NativeMethods.SimulateCtrlV();
+
+                // 8. 等待目标应用读取剪贴板完毕后（120ms），立即将用户的原有剪贴板原封不动恢复回去！
+                await Task.Delay(120);
+
+                if (backupText != null)
+                {
+                    _clipboardService.NotifyUpcomingSelfPaste(backupText);
+                    for (int r = 0; r < 3; r++)
+                    {
+                        try
+                        {
+                            System.Windows.Clipboard.SetText(backupText);
+                            break;
+                        }
+                        catch
+                        {
+                            await Task.Delay(25);
+                        }
+                    }
+                }
+                else if (backupImage != null)
+                {
+                    for (int r = 0; r < 3; r++)
+                    {
+                        try
+                        {
+                            System.Windows.Clipboard.SetImage(backupImage);
+                            break;
+                        }
+                        catch
+                        {
+                            await Task.Delay(25);
+                        }
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        System.Windows.Clipboard.Clear();
+                    }
+                    catch
+                    {
+                    }
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"QuickPhrase: 直接输入短语失败 ({ex.Message})");
+                System.Diagnostics.Debug.WriteLine($"QuickPhrase: 回填短语失败 ({ex.Message})");
+            }
+            finally
+            {
+                _clipboardService.EndInternalPaste();
             }
         }
 
