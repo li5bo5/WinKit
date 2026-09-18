@@ -84,10 +84,30 @@ namespace WinKit.Clipboard.Services
             }
         }
 
+        private volatile bool _isInternalPasting;
+
+        /// <summary>
+        /// 开启内部主动回填锁，在此期间绝对不将剪贴板的变化当作用户外部新复制
+        /// </summary>
+        public void BeginInternalPaste()
+        {
+            _isInternalPasting = true;
+        }
+
+        /// <summary>
+        /// 结束内部主动回填，给予微弱静默期确保 Win32 消息循环平稳跳过
+        /// </summary>
+        public void EndInternalPaste()
+        {
+            Task.Delay(350).ContinueWith(_ => _isInternalPasting = false);
+        }
+
         private void OnTimerTick(object? sender, EventArgs e)
         {
             try
             {
+                if (_isInternalPasting) return;
+
                 uint currentSeq = NativeMethods.GetClipboardSequenceNumber();
                 if (currentSeq == _lastHandledSequence && currentSeq != 0)
                 {
@@ -116,36 +136,55 @@ namespace WinKit.Clipboard.Services
                 // 2. 检查图片内容
                 if (System.Windows.Forms.Clipboard.ContainsImage())
                 {
-                    Image? img = null;
+                    Bitmap? bmpCopy = null;
                     try
                     {
-                        img = System.Windows.Forms.Clipboard.GetImage();
+                        using var rawImg = System.Windows.Forms.Clipboard.GetImage();
+                        if (rawImg != null)
+                        {
+                            bmpCopy = new Bitmap(rawImg);
+                        }
                     }
                     catch { }
 
-                    if (img != null)
+                    if (bmpCopy != null)
                     {
-                        var processedItem = ImageProcessingService.ProcessAndSaveImage(img);
-                        if (processedItem != null)
+                        _lastHandledSequence = currentSeq;
+
+                        // 彻底剥离 UI 线程：在后台工作线程池执行 PNG 编码、哈希、缩略图缩放及双重写盘
+                        Task.Run(() =>
                         {
-                            // 检查是否为即将发生的自回填图片或哈希重复
-                            if (!string.IsNullOrEmpty(processedItem.ImageHash))
+                            try
                             {
-                                if (_upcomingSelfPastes.ContainsKey(processedItem.ImageHash) ||
-                                    processedItem.ImageHash == _lastImageHash)
+                                using (bmpCopy)
                                 {
-                                    // 自回填或重复，安全删除刚刚生成的副本
-                                    ImageProcessingService.SafeDeleteFiles(processedItem);
-                                    _lastHandledSequence = currentSeq;
-                                    return;
+                                    var processedItem = ImageProcessingService.ProcessAndSaveImage(bmpCopy);
+                                    if (processedItem != null)
+                                    {
+                                        if (!string.IsNullOrEmpty(processedItem.ImageHash))
+                                        {
+                                            if (_upcomingSelfPastes.ContainsKey(processedItem.ImageHash) ||
+                                                processedItem.ImageHash == _lastImageHash)
+                                            {
+                                                ImageProcessingService.SafeDeleteFiles(processedItem);
+                                                return;
+                                            }
+                                        }
+
+                                        _lastImageHash = processedItem.ImageHash;
+                                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                                        {
+                                            ItemDetected?.Invoke(this, processedItem);
+                                        }));
+                                    }
                                 }
                             }
-
-                            _lastImageHash = processedItem.ImageHash;
-                            _lastHandledSequence = currentSeq;
-                            ItemDetected?.Invoke(this, processedItem);
-                            return;
-                        }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"ClipboardService: 异步处理大图失败 ({ex.Message})");
+                            }
+                        });
+                        return;
                     }
                 }
 
@@ -161,8 +200,12 @@ namespace WinKit.Clipboard.Services
 
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        // 检查是否为即将发生的自回填文本
-                        if (_upcomingSelfPastes.ContainsKey(text) || text == _lastTextContent)
+                        string normalizedText = text.Replace("\r\n", "\n").Trim();
+                        // 检查是否为即将发生的自回填文本（兼顾原始文本与换行归一化比对）
+                        if (_upcomingSelfPastes.ContainsKey(text) ||
+                            _upcomingSelfPastes.ContainsKey(normalizedText) ||
+                            text == _lastTextContent ||
+                            normalizedText == _lastTextContent?.Replace("\r\n", "\n").Trim())
                         {
                             _lastHandledSequence = currentSeq;
                             return;

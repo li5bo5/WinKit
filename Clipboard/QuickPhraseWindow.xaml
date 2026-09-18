@@ -30,7 +30,7 @@
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                            VerticalAlignment="Center"/>
-                <TextBlock Text="上下键选择 · Enter 回填"
+                <TextBlock Text="↑↓ 选择 · Enter 回填 · Esc 取消"
                            FontSize="10"
                            Foreground="{DynamicResource ThemeTextTertiaryBrush}"
                            HorizontalAlignment="Right"

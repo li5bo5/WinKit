@@ -184,7 +184,7 @@
                                     </StackPanel>
                                 </Grid>
 
-                                <!-- 2. 顶层：右侧重叠透明悬浮按钮层 (悬停时平滑浮现) -->
+                                <!-- 2. 顶层：右侧重叠透明悬浮按钮层 (悬停时平滑浮现，置顶时常驻显示) -->
                                 <StackPanel x:Name="OverlayActions"
                                             Orientation="Horizontal"
                                             HorizontalAlignment="Right"
@@ -192,6 +192,16 @@
                                             Panel.ZIndex="10"
                                             Opacity="0"
                                             Margin="0,0,2,0">
+                                    <!-- 置顶 / 取消置顶图钉按钮 -->
+                                    <Button x:Name="PinItemBtn"
+                                            Content="{Binding PinIcon}"
+                                            Style="{StaticResource ActionBtn}"
+                                            Width="22" Height="22"
+                                            FontSize="11"
+                                            Margin="1,0"
+                                            Tag="{Binding}"
+                                            Click="PinItemButton_Click"/>
+
                                     <!-- 仅对图片显示的“小眼睛”系统预览按钮 -->
                                     <Button x:Name="PreviewBtn"
                                             Content="👁"
@@ -228,6 +238,9 @@
                                 <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                     <Setter TargetName="OverlayActions" Property="Opacity" Value="1"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                                    <Setter TargetName="OverlayActions" Property="Opacity" Value="1"/>
+                                </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -245,17 +258,25 @@
             </Grid>
 
             <!-- ══════════════════════════════════════════
-                 3. 底部状态栏 & 清空按钮
+                 3. 底部状态栏 & 操作按钮
             ══════════════════════════════════════════ -->
             <Grid Grid.Row="2" Margin="10,0,10,0">
-                <Button x:Name="ClearAllBtn"
-                        Content="清空全部"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"
-                        Width="80"
-                        Height="26"
-                        Style="{StaticResource FluentSecondaryButton}"
-                        Click="ClearAllButton_Click"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <Button x:Name="ClearAllBtn"
+                            Content="清空全部"
+                            Width="74"
+                            Height="26"
+                            Style="{StaticResource FluentSecondaryButton}"
+                            Click="ClearAllButton_Click"/>
+
+                    <Button x:Name="UnpinAllBtn"
+                            Content="取消置顶"
+                            Margin="8,0,0,0"
+                            Width="74"
+                            Height="26"
+                            Style="{StaticResource FluentSecondaryButton}"
+                            Click="UnpinAllButton_Click"/>
+                </StackPanel>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock x:Name="CountText" Text="0 项" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>

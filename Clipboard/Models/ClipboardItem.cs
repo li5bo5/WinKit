@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 
 namespace WinKit.Clipboard.Models
@@ -13,9 +14,9 @@ namespace WinKit.Clipboard.Models
     }
 
     /// <summary>
-    /// 剪贴板项目实体（支持文本与本地持久化图片）
+    /// 剪贴板项目实体（支持文本与本地持久化图片、支持置顶）
     /// </summary>
-    public class ClipboardItem
+    public class ClipboardItem : INotifyPropertyChanged
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public ClipboardItemType Type { get; set; } = ClipboardItemType.Text;
@@ -59,35 +60,65 @@ namespace WinKit.Clipboard.Models
             set => CreatedAt = new DateTimeOffset(value);
         }
 
+        private bool _isPinned = false;
+        /// <summary>
+        /// 是否置顶锁死
+        /// </summary>
+        public bool IsPinned
+        {
+            get => _isPinned;
+            set
+            {
+                if (_isPinned != value)
+                {
+                    _isPinned = value;
+                    OnPropertyChanged(nameof(IsPinned));
+                    OnPropertyChanged(nameof(PinIcon));
+                }
+            }
+        }
+
+        /// <summary>
+        /// 置顶时间戳
+        /// </summary>
+        public DateTimeOffset? PinnedAt { get; set; }
+
+        public string PinIcon => _isPinned ? "📍" : "📌";
+
         public string FormattedTime => CreatedAt.LocalDateTime.ToString("MM-dd HH:mm");
 
         public bool IsImage => Type == ClipboardItemType.Image;
         public bool IsText => Type == ClipboardItemType.Text;
 
+        private string? _displayTextCached;
         /// <summary>
-        /// 格式化显示文本
+        /// 格式化显示文本（带只读缓存，优化长文本列表滚动性能）
         /// </summary>
         public string DisplayText
         {
             get
             {
+                if (_displayTextCached != null) return _displayTextCached;
                 if (IsImage)
                 {
                     string sizeStr = ImageSize > 1024 * 1024
                         ? $"{ImageSize / 1024.0 / 1024.0:F1} MB"
                         : $"{ImageSize / 1024.0:F0} KB";
-                    return string.IsNullOrEmpty(ImageResolution)
+                    _displayTextCached = string.IsNullOrEmpty(ImageResolution)
                         ? $"[图片] {sizeStr}"
                         : $"[图片] {ImageResolution} · {sizeStr}";
                 }
-
-                var text = Content ?? string.Empty;
-                text = text.Trim();
-                if (text.Length > 100)
+                else
                 {
-                    text = text.Substring(0, 100) + "...";
+                    var text = Content ?? string.Empty;
+                    text = text.Trim();
+                    if (text.Length > 100)
+                    {
+                        text = text.Substring(0, 100) + "...";
+                    }
+                    _displayTextCached = text.Replace("\r", " ").Replace("\n", " ");
                 }
-                return text.Replace("\r", " ").Replace("\n", " ");
+                return _displayTextCached;
             }
         }
 
@@ -102,5 +133,9 @@ namespace WinKit.Clipboard.Models
                 return Content?.Length * 2 ?? 0;
             }
         }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged(string propName) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propName));
     }
 }

@@ -217,29 +217,142 @@ namespace WinKit.Common
             return (langId == 0x0804 || langId == 0x0404 || langId == 0x0C04 || langId == 0x1404 || langId == 0x1004);
         }
 
+        #region TSF (Text Services Framework) 现代输入法隔室检测接口
+
+        [ComImport]
+        [Guid("aa80e801-2021-11d2-93e0-0060b067b86e")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface ITfThreadMgr
+        {
+            void Activate(out int clientId);
+            void Deactivate();
+            void CreateDocumentMgr(out IntPtr docMgr);
+            void EnumDocumentMgrs(out IntPtr enumDocMgrs);
+            void GetFocus(out IntPtr docMgr);
+            void SetFocus(IntPtr docMgr);
+            void AssociateFocus(IntPtr hwnd, IntPtr newDocMgr, out IntPtr prevDocMgr);
+            void IsAssocWithFocus(IntPtr hwnd, IntPtr docMgr, [MarshalAs(UnmanagedType.Bool)] out bool isAssoc);
+            [PreserveSig]
+            int GetGlobalCompartment(out ITfCompartmentMgr compMgr);
+        }
+
+        [ComImport]
+        [Guid("7dcf57ac-18ad-438b-824d-979bffb74b7c")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface ITfCompartmentMgr
+        {
+            [PreserveSig]
+            int GetCompartment(ref Guid rguid, out ITfCompartment comp);
+            void ClearCompartment(int clientId, ref Guid rguid);
+            void EnumCompartments(out IntPtr enumComp);
+        }
+
+        [ComImport]
+        [Guid("bb08f7a9-607a-4384-8623-056892b64371")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface ITfCompartment
+        {
+            [PreserveSig]
+            int SetValue(int clientId, ref object varValue);
+            [PreserveSig]
+            int GetValue(out object varValue);
+        }
+
+        [ComImport]
+        [Guid("52960acf-999a-40a9-9555-bf5e0d931e05")]
+        public class TfThreadMgr
+        {
+        }
+
+        public static readonly Guid GUID_COMPARTMENT_KEYBOARD_OPENCLOSE = new Guid("a76c53cc-a528-4084-8309-67b58c7668e0");
+        public static readonly Guid GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION = new Guid("73830354-d347-42cd-bb77-aa27225e3266");
+        public const int TF_CONVERSIONMODE_NATIVE = 0x0001;
+
         /// <summary>
-        /// 检测指定输入窗口当前是否处于中文拼音输入状态（有候选框）
-        /// 若为纯英文布局，或中文输入法下按 Shift 切换到了英文模式，则返回 false（字符已直接上屏）
+        /// 通过 TSF (Text Services Framework) 全局隔室管理器读取现代输入法真实状态
+        /// 1. 检查 GUID_COMPARTMENT_KEYBOARD_OPENCLOSE → 为 0 则 IME 完全关闭（英文状态）
+        /// 2. 检查 GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION → (val & TF_CONVERSIONMODE_NATIVE) != 0 为中文模式，否则为 Shift 临时英文
         /// </summary>
-        public static bool IsImeComposingChinese(IntPtr hWnd)
+        private static bool? CheckTsfInputMode()
+        {
+            try
+            {
+                var threadMgr = (ITfThreadMgr)new TfThreadMgr();
+                if (threadMgr.GetGlobalCompartment(out var compMgr) == 0 && compMgr != null)
+                {
+                    var openGuid = GUID_COMPARTMENT_KEYBOARD_OPENCLOSE;
+                    var convGuid = GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION;
+
+                    if (compMgr.GetCompartment(ref openGuid, out var openComp) == 0 && openComp != null &&
+                        compMgr.GetCompartment(ref convGuid, out var convComp) == 0 && convComp != null)
+                    {
+                        openComp.GetValue(out object openVal);
+                        convComp.GetValue(out object convVal);
+
+                        if (openVal != null && convVal != null)
+                        {
+                            int openStatus = Convert.ToInt32(openVal);
+                            // 1. 若 OPENCLOSE == 0，说明 IME 完全关闭，处于英文状态
+                            if (openStatus == 0)
+                            {
+                                return false;
+                            }
+
+                            int convMode = Convert.ToInt32(convVal);
+                            // 2. 检查是否开启了 Native 中文模式（单按 Shift 会将 Native 置 0 变为英文模式）
+                            return (convMode & TF_CONVERSIONMODE_NATIVE) != 0;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略 COM 异常，交由后续 Win32 通道兜底
+            }
+            return null;
+        }
+
+        #endregion
+
+        public const uint WM_IME_CONTROL = 0x0283;
+        public const uint IMC_GETCONVERSIONMODE = 0x0001;
+        public const uint IMC_GETOPENSTATUS = 0x0005;
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        /// <summary>
+        /// 精准检测指定窗口当前是否真正处于中文输入模式（而非纯英文键盘或中文输入法下按 Shift 切换的英文打字状态）
+        /// 遵循双轨检测架构（TSF 现代隔室管理器 + Win32 WM_IME_CONTROL 穿透），兼顾系统级安全性与零误触
+        /// </summary>
+        public static bool IsChineseInputMode(IntPtr hWnd)
         {
             if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
 
             uint threadId = GetWindowThreadProcessId(hWnd, out _);
 
-            // 1. 检查当前前台线程的键盘布局语言
+            // 1. 检查当前前台线程的键盘布局语言代码（低 16 位）
             IntPtr hkl = GetKeyboardLayout(threadId);
             ushort langId = (ushort)((long)hkl & 0xFFFF);
-            // 0x0804 = 中文(中国简体), 0x0404 = 中文(台湾繁体), 0x0C04 = 中文(香港繁体)
-            bool isChineseLayout = (langId == 0x0804 || langId == 0x0404 || langId == 0x0C04);
+            // 0x0804 = 中文(中国简体), 0x0404 = 中文(台湾繁体), 0x0C04 = 中文(香港繁体), 0x1404 = 中文(澳门), 0x1004 = 中文(新加坡)
+            bool isChineseLayout = (langId == 0x0804 || langId == 0x0404 || langId == 0x0C04 || langId == 0x1404 || langId == 0x1004);
 
             if (!isChineseLayout)
             {
-                // 纯英文/非中文键盘布局 -> 直接上屏模式
+                // 纯英文布局（如 en-US 0x0409）或其它语言布局 -> 100% 为英文打字
                 return false;
             }
 
-            // 2. 获取真正持有焦点的控件
+            // 2. 优先通过 TSF (Text Services Framework) 全局隔室读取现代输入法真实状态
+            // ① 检查 GUID_COMPARTMENT_KEYBOARD_OPENCLOSE：为 0 则 IME 关闭（英文）
+            // ② 检查 GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION：(value & TF_CONVERSIONMODE_NATIVE) != 0 为中文，否则为 Shift 英文
+            bool? tsfResult = CheckTsfInputMode();
+            if (tsfResult.HasValue)
+            {
+                return tsfResult.Value;
+            }
+
+            // 3. 补充通道：跨进程通过 WM_IME_CONTROL 向 Default IME 窗口查询状态（Win32 跨进程与输入法交互的标准方案）
             var guiInfo = new GUITHREADINFO();
             guiInfo.cbSize = Marshal.SizeOf(guiInfo);
             IntPtr targetHwnd = hWnd;
@@ -248,13 +361,36 @@ namespace WinKit.Common
                 targetHwnd = guiInfo.hwndFocus;
             }
 
-            // 3. 在中文输入法下，检查是否按 Shift 切换到了英文模式
-            IntPtr hImc = ImmGetContext(targetHwnd);
-            if (hImc == IntPtr.Zero)
+            IntPtr defImeWnd = ImmGetDefaultIMEWnd(targetHwnd);
+            if (defImeWnd == IntPtr.Zero && targetHwnd != hWnd)
             {
-                IntPtr defIme = ImmGetDefaultIMEWnd(targetHwnd);
-                if (defIme != IntPtr.Zero) hImc = ImmGetContext(defIme);
+                defImeWnd = ImmGetDefaultIMEWnd(hWnd);
             }
+
+            if (defImeWnd != IntPtr.Zero)
+            {
+                // 查询输入法开关状态：0 为关闭（英文状态），非 0 为开启（中文状态）
+                IntPtr openStatus = SendMessage(defImeWnd, WM_IME_CONTROL, (IntPtr)IMC_GETOPENSTATUS, IntPtr.Zero);
+                if (openStatus == IntPtr.Zero)
+                {
+                    // 当前处于关闭状态或英文打字状态
+                    return false;
+                }
+
+                // 查询输入法转换模式：检查是否包含 IME_CMODE_NATIVE (0x0001)
+                IntPtr convMode = SendMessage(defImeWnd, WM_IME_CONTROL, (IntPtr)IMC_GETCONVERSIONMODE, IntPtr.Zero);
+                if ((convMode.ToInt64() & IME_CMODE_NATIVE) == 0)
+                {
+                    // 未开启 Native 中文转换模式（即单按 Shift 切换成了临时英文打字状态）
+                    return false;
+                }
+
+                // 确凿处于中文开启状态
+                return true;
+            }
+
+            // 4. 补充通道：尝试通过 ImmGetContext 查询
+            IntPtr hImc = ImmGetContext(targetHwnd);
             if (hImc == IntPtr.Zero && targetHwnd != hWnd)
             {
                 hImc = ImmGetContext(hWnd);
@@ -265,22 +401,13 @@ namespace WinKit.Common
                 try
                 {
                     bool isOpen = ImmGetOpenStatus(hImc);
-                    if (!isOpen)
-                    {
-                        // 用户关闭了输入法或切到了英文模式 -> 直接上屏
-                        return false;
-                    }
+                    if (!isOpen) return false;
 
                     if (ImmGetConversionStatus(hImc, out uint conversion, out _))
                     {
-                        // 若不包含 IME_CMODE_NATIVE (0x0001)，说明用户单按 Shift 切到了英文状态
-                        if ((conversion & IME_CMODE_NATIVE) == 0)
-                        {
-                            return false;
-                        }
+                        if ((conversion & IME_CMODE_NATIVE) == 0) return false;
                     }
 
-                    // 处于中文模式且开启中
                     return true;
                 }
                 catch
@@ -293,9 +420,11 @@ namespace WinKit.Common
                 }
             }
 
-            // 默认如果在中文布局下，视为中文模式
-            return true;
+            // 5. 保守安全原则：无法确认时一律返回 false，宁可不触发，也绝不在英文打字或写代码时误触发
+            return false;
         }
+
+        public static bool IsImeComposingChinese(IntPtr hWnd) => IsChineseInputMode(hWnd);
 
         /// <summary>
         /// 穿透 Windows 权限限制强制将指定窗口切换为前台焦点窗口
@@ -346,6 +475,21 @@ namespace WinKit.Common
 
             // 3. Ctrl Up
             keybd_event((byte)VK_CTRL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        public static extern int RegisterWindowMessage(string lpString);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PostMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+
+        public const int HWND_BROADCAST = 0xFFFF;
+        public static readonly int WM_SHOW_EXISTING_INSTANCE = RegisterWindowMessage("WinKit_ActivateExistingInstance_li5bo5");
+
+        public static void BringExistingInstanceToFront()
+        {
+            PostMessage((IntPtr)HWND_BROADCAST, WM_SHOW_EXISTING_INSTANCE, IntPtr.Zero, IntPtr.Zero);
         }
     }
 }

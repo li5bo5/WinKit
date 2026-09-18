@@ -163,5 +163,16 @@ namespace WinKit.Todo
                 screen.WorkingArea.Width / dpi.DpiScaleX,
                 screen.WorkingArea.Height / dpi.DpiScaleY);
         }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (App.IsExiting)
+            {
+                base.OnClosing(e);
+                return;
+            }
+            e.Cancel = true;
+            Hide();
+        }
     }
 }
