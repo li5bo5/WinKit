@@ -93,9 +93,8 @@ WinKit 采用绿色便携化设计，所有数据与配置文件均统一存放�
 文件采用标准 **JSONL** 格式（每行一个完整的 JSON 对象），字段说明如下：
 
 ```jsonl
-{"name": "Everything", "path": "D:\\PortableApps\\Everything\\Everything.exe"}
-{"name": "Notepad3", "path": "D:\\Tools\\Notepad3.exe", "args": ""}
-{"name": "工作空间目录", "path": "D:\\Workspace"}
+{"name": "Everything", "path": "‪F:\Downloads\Everything.exe"}
+{"name": "工作空间目录", "path": "‪F:\Downloads\README.md"}
 ```
 
 > 💡 **绿色迁移提示**：如需备份数据或迁移至新电脑，只需将整个 WinKit 文件夹（包含 `Data` 目录）复制到任意位置即可 100% 完整迁移。每个数据文件均内置 `.bak` 损坏自愈备份机制。
