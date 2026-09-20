@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>WinKit</AssemblyName>
+    <RootNamespace>WinKit</RootNamespace>
+    <Version>2.7</Version>
+    <Authors>li5bo5</Authors>
+    <Company>li5bo5</Company>
+    <Product>WinKit</Product>
+    <Description>一款开源工具</Description>
+    <FileDescription>一款开源工具</FileDescription>
+    <ApplicationIcon>PTD.ico</ApplicationIcon>
+    
+    <!-- 优化发布选项 -->
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 将 PTD.ico 作为嵌入资源，以便托盘读取，同时编译为应用程序图标 -->
+    <Resource Include="PTD.ico" />
+    <EmbeddedResource Include="PTD.ico" />
+  </ItemGroup>
+
+</Project>
