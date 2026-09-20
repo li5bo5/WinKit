@@ -1,0 +1,174 @@
+<Window x:Class="WinKit.Todo.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="待办历史"
+        Width="320"
+        Height="440"
+        MinWidth="240"
+        MinHeight="260"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="CenterScreen">
+
+    <!-- 窗口主容器 -->
+    <Border Style="{StaticResource FluentWindowBorder}"
+            MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="46"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. 标题栏 -->
+            <Grid Grid.Row="0" x:Name="TitleBar" Background="Transparent">
+                <TextBlock Text="待办历史"
+                           VerticalAlignment="Center"
+                           Margin="16,0"
+                           FontSize="13.5"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+
+                <Button x:Name="CloseBtn"
+                        Content="✕"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,10,0"
+                        Width="26" Height="26"
+                        Style="{StaticResource WinKitGlassCloseButton}"
+                        Click="CloseBtn_Click"/>
+            </Grid>
+
+            <!-- 2. 统计与提示栏 -->
+            <Grid Grid.Row="1" Margin="16,2,16,6">
+                <TextBlock x:Name="CountText" Text="0 条记录" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- 3. 内容列表区 -->
+            <Grid Grid.Row="2" Margin="16,0,16,0">
+                <!-- 空白占位 -->
+                <TextBlock x:Name="EmptyPlaceholder"
+                           Text="暂无已删除的待办历史"
+                           FontSize="12"
+                           Foreground="{DynamicResource ThemeTextPlaceholderBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+
+                <!-- 历史列表 -->
+                <ListBox x:Name="HistoryList"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <ScrollViewer Style="{StaticResource NarrowScrollViewer}" Focusable="False">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ListBox.Template>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,0,6"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource ThemeCardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource ThemeCardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,6">
+                                <Grid>
+                                    <!-- 1. 底层：标题与时间，占满 100% 宽度 -->
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Style="{DynamicResource TodoItemTextBlockStyle}"/>
+                                        <TextBlock Text="{Binding FormattedTime}"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource ThemeTextSecondaryBrush}"
+                                                   Margin="0,3,0,0"/>
+                                    </StackPanel>
+
+                                    <!-- 2. 顶层：右侧重叠透明悬浮按钮层 (悬停时平滑浮现) -->
+                                    <StackPanel x:Name="OverlayActions"
+                                                Orientation="Horizontal"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Panel.ZIndex="10"
+                                                Opacity="0"
+                                                Margin="0,0,2,0">
+                                        <!-- 还原按钮 -->
+                                        <Button Content="⟲"
+                                                Style="{StaticResource ActionBtn}"
+                                                Tag="{Binding}"
+                                                Click="RestoreBtn_Click"/>
+
+                                        <!-- 彻底删除按钮 -->
+                                        <Button Content="✕"
+                                                Style="{StaticResource ActionBtn}"
+                                                Tag="{Binding}"
+                                                Click="DeleteBtn_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter TargetName="OverlayActions" Property="Opacity" Value="1"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+
+            <!-- 4. 底部栏：清空历史 -->
+            <Border Grid.Row="3" BorderBrush="{DynamicResource ThemeCardBorderBrush}" BorderThickness="0,1,0,0">
+                <Grid Margin="16,0">
+                    <Button x:Name="ClearAllBtn"
+                            Content="清空历史"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Width="80"
+                            Height="26"
+                            Style="{StaticResource FluentSecondaryButton}"
+                            Click="ClearAllBtn_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- 右下角自定义 ResizeGrip 缩放手柄 -->
+            <Grid Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                <Border x:Name="ResizeGripArea"
+                        Width="12" Height="12"
+                        Background="Transparent"
+                        Cursor="SizeNWSE"
+                        Opacity="0.4"
+                        MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown">
+                    <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                        <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                        <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
+                    </Canvas>
+                </Border>
+            </Grid>
+
+        </Grid>
+    </Border>
+</Window>

@@ -1,0 +1,798 @@
+using System;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using WinKit.Common;
+using WinKit.Todo.Models;
+using WinKit.Todo.Services;
+using WinPoint       = System.Windows.Point;
+using WinKey         = System.Windows.Input.KeyEventArgs;
+using WinMouse       = System.Windows.Input.MouseEventArgs;
+using WinDrag        = System.Windows.DragEventArgs;
+using WinButton      = System.Windows.Controls.Button;
+using WinDropEffects = System.Windows.DragDropEffects;
+
+namespace WinKit.Todo
+{
+    public partial class MainWindow : Window
+    {
+        // ══════════════════════════════════════════════
+        // Win32 P/Invoke — 鼠标穿透（仅内容区）
+        // ══════════════════════════════════════════════
+        private const int WM_NCHITTEST  = 0x0084;
+        private const int HTTRANSPARENT = -1;
+
+        private readonly ObservableCollection<TodoItem> _items = new();
+        private readonly TodoService _todoService;
+        private readonly RecycleBinService _recycleBinService;
+        private readonly SettingsManager _settingsManager;
+
+        // 拖拽排序
+        private WinPoint  _dragStart;
+        private TodoItem? _dragItem;
+
+        // 窗口调整大小
+        private bool _isResizing;
+        private WinPoint _resizeStart;
+        private double   _resizeStartW, _resizeStartH;
+
+        // 置顶 / 穿透（独立状态）
+        private bool _isPinned      = false;
+        private bool _isPassThrough = false;
+
+        // 托盘引用（用于同步状态）
+        private TrayHelper? _tray;
+        public bool IsPinned      => _isPinned;
+        public bool IsPassThrough => _isPassThrough;
+        public bool IsPassThroughEnabled
+        {
+            get => _isPassThrough;
+            set
+            {
+                if (_isPassThrough != value)
+                {
+                    TogglePassThroughState();
+                }
+            }
+        }
+        public void SetTray(TrayHelper tray) => _tray = tray;
+
+        private const int WM_MOVING = 0x0216;
+        private const int WM_SHOWWINDOW = 0x0018;
+        private const int SW_PARENTCLOSING = 3;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TRANSPARENT = 0x00000020;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+
+        // ══════════════════════════════════════════════
+        // 构造函数
+        // ══════════════════════════════════════════════
+        public MainWindow(SettingsManager settingsManager)
+        {
+            InitializeComponent();
+            _settingsManager = settingsManager;
+
+            // 确保窗口句柄创建，以便后续初始化设置和 Win32 钩子正常运行
+            new WindowInteropHelper(this).EnsureHandle();
+
+            _todoService = new TodoService();
+            _recycleBinService = new RecycleBinService(_settingsManager);
+            foreach (var item in _todoService.LoadTodos())
+                _items.Add(item);
+            TodoList.ItemsSource = _items;
+
+            // 监听集合变化，同步空列表占位符
+            _items.CollectionChanged += (s, e) => UpdateEmptyPlaceholder();
+
+            // 订阅状态变化：免疫 Win+D 强制最小化
+            StateChanged += MainWindow_StateChanged;
+
+            // 初始化或恢复保存的窗口位置与大小
+            ApplyInitialOrSavedBounds();
+
+            // 载入并应用保存的设置
+            LoadSettings();
+
+            // 监听统一偏好设置变更广播
+            _settingsManager.SettingsChanged += (s, settings) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (_isPassThrough != settings.TodoIsPassThrough)
+                    {
+                        ApplyPassThroughState(settings.TodoIsPassThrough);
+                    }
+                    if (_isPinned != settings.TodoIsPinned)
+                    {
+                        _isPinned = settings.TodoIsPinned;
+                        this.Topmost = _isPinned;
+                        UpdatePinButton();
+                    }
+                });
+            };
+
+            // 初始化占位符状态
+            UpdateEmptyPlaceholder();
+
+            // 初始状态下标题栏按钮保持隐藏（仅悬停时浮现）
+            Loaded += (s, e) =>
+            { 
+                UpdateEmptyPlaceholder(); 
+                SetTitleButtonsOpacity(0); 
+            };
+        }
+
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // 窗口初始化：挂钩 WndProc 并注入 WS_EX_TOOLWINDOW
+        // ══════════════════════════════════════════════
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var hwndSource = HwndSource.FromHwnd(hwnd);
+            hwndSource?.AddHook(WndProc);
+
+            int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            extendedStyle |= WS_EX_TOOLWINDOW;
+            if (_isPassThrough)
+            {
+                extendedStyle |= WS_EX_TRANSPARENT;
+            }
+            SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle);
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // 1. 免疫 Win + D（显示桌面）：拦截 SW_PARENTCLOSING
+            if (msg == WM_SHOWWINDOW && wParam == IntPtr.Zero && lParam.ToInt32() == SW_PARENTCLOSING)
+            {
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            // 2. 接收来自新进程的激活广播消息
+            if (msg == NativeMethods.WM_SHOW_EXISTING_INSTANCE)
+            {
+                if (!IsVisible) Show();
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Activate();
+                NativeMethods.ForceSetForegroundWindow(hwnd);
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            // 3. 限制窗口拖动在当前屏幕工作区内
+            if (msg == WM_MOVING)
+            {
+                // 获取当前鼠标所在的屏幕工作区（物理像素）
+                POINT mousePos;
+                GetCursorPos(out mousePos);
+                var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(mousePos.X, mousePos.Y));
+                var area = screen.WorkingArea;
+
+                var rect = (RECT)Marshal.PtrToStructure(lParam, typeof(RECT))!;
+                int width = rect.Right - rect.Left;
+                int height = rect.Bottom - rect.Top;
+
+                if (rect.Left < area.Left)
+                {
+                    rect.Left = area.Left;
+                    rect.Right = rect.Left + width;
+                }
+                else if (rect.Right > area.Right)
+                {
+                    rect.Right = area.Right;
+                    rect.Left = rect.Right - width;
+                }
+
+                if (rect.Top < area.Top)
+                {
+                    rect.Top = area.Top;
+                    rect.Bottom = rect.Top + height;
+                }
+                else if (rect.Bottom > area.Bottom)
+                {
+                    rect.Bottom = area.Bottom;
+                    rect.Top = rect.Bottom - height;
+                }
+
+                Marshal.StructureToPtr(rect, lParam, true);
+                handled = true;
+                return new IntPtr(1);
+            }
+            return IntPtr.Zero;
+        }
+
+        // ══════════════════════════════════════════════
+        // TitleBar 区域悬停：严格鼠标悬停显隐控制
+        // ══════════════════════════════════════════════
+        private void TitleBar_MouseEnter(object sender, WinMouse e) => SetTitleButtonsOpacity(1);
+        private void TitleBar_MouseLeave(object sender, WinMouse e) => SetTitleButtonsOpacity(0);
+
+        private void SetTitleButtonsOpacity(double opacity)
+        {
+            if (AddBtn != null) AddBtn.Opacity                 = opacity;
+            if (PinBtn != null) PinBtn.Opacity                 = opacity;
+            if (PassThroughBtn != null) PassThroughBtn.Opacity = opacity;
+            if (CloseBtn != null) CloseBtn.Opacity             = opacity;
+        }
+
+        private void AddBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowCreateTodoDialog();
+        }
+
+        // ResizeGrip 区域悬停：控制 Grip 显示
+        private void ResizeGrip_MouseEnter(object sender, WinMouse e)
+        {
+            if (!_isPinned) ResizeGripArea.Opacity = 1;
+        }
+        private void ResizeGrip_MouseLeave(object sender, WinMouse e) => ResizeGripArea.Opacity = 0;
+
+        // ══════════════════════════════════════════════
+        // 标题栏拖动
+        // ══════════════════════════════════════════════
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 1)
+            {
+                DragMove();
+                SaveWindowBounds();
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // 标题栏按钮
+        // ══════════════════════════════════════════════
+        private void CloseBtn_Click(object sender, RoutedEventArgs e) => Hide();
+
+        private void PinBtn_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePinState();
+            _tray?.SyncPinMenuItem();
+        }
+
+        internal void TogglePinFromTray()
+        {
+            TogglePinState();
+        }
+
+        private void TogglePinState()
+        {
+            _isPinned    = !_isPinned;
+            this.Topmost = _isPinned;
+            UpdatePinButton();
+            SaveSettings();
+        }
+
+        private void UpdatePinButton()
+        {
+            PinBtn.Content = "📌";
+            if (TopAccentLine != null)
+                TopAccentLine.Visibility = _isPinned ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // ══════════════════════════════════════════════
+        // 鼠标穿透控制逻辑
+        // ══════════════════════════════════════════════
+        private void PassThroughBtn_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePassThroughState();
+            _tray?.SyncPassThroughMenuItem();
+        }
+
+        internal void TogglePassThroughFromTray()
+        {
+            TogglePassThroughState();
+        }
+
+        private void TogglePassThroughState()
+        {
+            _isPassThrough = !_isPassThrough;
+            ApplyPassThroughState(_isPassThrough);
+            SaveSettings();
+        }
+
+        private void ApplyPassThroughState(bool isPassThrough)
+        {
+            _isPassThrough = isPassThrough;
+            PassThroughBtn.Content = _isPassThrough ? "◉" : "⊙";
+            if (_isPassThrough)
+            {
+                ResizeGripArea.Opacity = 0;
+            }
+
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                if (_isPassThrough)
+                {
+                    SetTitleButtonsOpacity(0);
+                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT);
+                }
+                else
+                {
+                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // 右下角自定义 ResizeGrip
+        // ══════════════════════════════════════════════
+        private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _isResizing   = true;
+            _resizeStart  = e.GetPosition(null);
+            _resizeStartW = Width;
+            _resizeStartH = Height;
+            ((UIElement)sender).CaptureMouse();
+            ((UIElement)sender).MouseMove        += ResizeGrip_MouseMove;
+            ((UIElement)sender).MouseLeftButtonUp += ResizeGrip_MouseLeftButtonUp;
+            e.Handled = true;
+        }
+
+        private void ResizeGrip_MouseMove(object sender, WinMouse e)
+        {
+            if (!_isResizing) return;
+            var pos   = e.GetPosition(null);
+            var delta = pos - _resizeStart;
+            
+            double newW = Math.Max(MinWidth, _resizeStartW + delta.X);
+            double newH = Math.Max(MinHeight, _resizeStartH + delta.Y);
+
+            var area = GetCurrentScreenWorkArea();
+            if (Left + newW > area.Right)
+            {
+                newW = area.Right - Left;
+            }
+            if (Top + newH > area.Bottom)
+            {
+                newH = area.Bottom - Top;
+            }
+
+            Width  = newW;
+            Height = newH;
+        }
+
+        public bool IsPreferencesWindowOpen { get; set; } = false;
+        public EditDialog? ActiveEditDialog { get; set; } = null;
+
+        private Rect GetCurrentScreenWorkArea()
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
+            var area = screen.WorkingArea;
+
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+            double dpiScaleX = dpi.DpiScaleX;
+            double dpiScaleY = dpi.DpiScaleY;
+
+            return new Rect(
+                area.Left / dpiScaleX,
+                area.Top / dpiScaleY,
+                area.Width / dpiScaleX,
+                area.Height / dpiScaleY
+            );
+        }
+
+        private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            _isResizing = false;
+            ((UIElement)sender).ReleaseMouseCapture();
+            ((UIElement)sender).MouseMove        -= ResizeGrip_MouseMove;
+            ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
+            SaveWindowBounds();
+        }
+
+        // ══════════════════════════════════════════════
+        // 待办创建与编辑统一弹窗呼出
+        // ══════════════════════════════════════════════
+        private void ShowCreateTodoDialog()
+        {
+            if (IsPreferencesWindowOpen) return;
+
+            var dlg = new EditDialog("新建待办", "") { Owner = this };
+            ActiveEditDialog = dlg;
+            try
+            {
+                if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultText))
+                {
+                    AddTodoItem(dlg.ResultText);
+                }
+            }
+            finally
+            {
+                ActiveEditDialog = null;
+            }
+        }
+
+        private void TodoList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (IsPreferencesWindowOpen) return;
+
+            var src = e.OriginalSource as DependencyObject;
+            while (src != null)
+            {
+                if (src is System.Windows.Controls.Button) return;
+                src = System.Windows.Media.VisualTreeHelper.GetParent(src);
+            }
+
+            if (e.OriginalSource is FrameworkElement fe && fe.DataContext is TodoItem item)
+            {
+                ShowEditDialog(item);
+                return;
+            }
+
+            ShowCreateTodoDialog();
+        }
+
+        public void HideInlineInput()
+        {
+            // 内联输入已全面统一为独立弹窗，保留此方法兼容外部托盘调用
+            if (ActiveEditDialog != null)
+            {
+                ActiveEditDialog.Close();
+                ActiveEditDialog = null;
+            }
+        }
+
+        public void HideInlineInputAndWindow()
+        {
+            HideInlineInput();
+            Hide();
+        }
+
+        private void UpdateEmptyPlaceholder()
+        {
+            EmptyPlaceholder.Visibility =
+                _items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // ══════════════════════════════════════════════
+        // 编辑 / 删除 / 恢复
+        // ══════════════════════════════════════════════
+        private void EditBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (IsPreferencesWindowOpen) return;
+
+            var id   = (Guid)((WinButton)sender).Tag;
+            var item = _items.FirstOrDefault(i => i.Id == id);
+            if (item != null) ShowEditDialog(item);
+        }
+
+        public void AddTodoItem(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title)) return;
+            _items.Add(new TodoItem { Title = title });
+            _todoService.SaveTodos(_items);
+            if (_items.Count > 0)
+                TodoList.ScrollIntoView(_items[^1]);
+        }
+
+        /// <summary>
+        /// 从回收站还原待办事项（保持原始 ID 和创建时间）
+        /// </summary>
+        public void RestoreTodoItem(TodoItem restoredItem)
+        {
+            if (restoredItem == null || string.IsNullOrWhiteSpace(restoredItem.Title)) return;
+            _items.Add(restoredItem);
+            _todoService.SaveTodos(_items);
+            if (_items.Count > 0)
+                TodoList.ScrollIntoView(_items[^1]);
+        }
+
+        private HistoryWindow? _historyWindow;
+
+        public void SetHistoryWindow(HistoryWindow historyWindow)
+        {
+            _historyWindow = historyWindow;
+        }
+
+        public void DeleteTodoItem(TodoItem item)
+        {
+            if (item == null) return;
+            _recycleBinService.AddToRecycleBin(item);
+            _items.Remove(item);
+            _todoService.SaveTodos(_items);
+
+            _historyWindow?.Dispatcher.Invoke(() =>
+            {
+                if (_historyWindow.IsVisible)
+                {
+                    _historyWindow.ReloadRecycleBin();
+                }
+            });
+        }
+
+        private void ShowEditDialog(TodoItem item)
+        {
+            if (IsPreferencesWindowOpen) return;
+
+            var dlg = new EditDialog("编辑待办", item.Title) { Owner = this };
+            ActiveEditDialog = dlg;
+            try
+            {
+                if (dlg.ShowDialog() == true)
+                {
+                    if (string.IsNullOrWhiteSpace(dlg.ResultText))
+                    {
+                        // 空值即删除
+                        DeleteTodoItem(item);
+                    }
+                    else
+                    {
+                        item.Title = dlg.ResultText;
+                        var idx = _items.IndexOf(item);
+                        _items.RemoveAt(idx);
+                        _items.Insert(idx, item);
+                        _todoService.SaveTodos(_items);
+                    }
+                }
+            }
+            finally
+            {
+                ActiveEditDialog = null;
+            }
+        }
+
+        private void DeleteBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var id   = (Guid)((WinButton)sender).Tag;
+            var item = _items.FirstOrDefault(i => i.Id == id);
+            if (item != null)
+            {
+                DeleteTodoItem(item);
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // 拖拽排序
+        // ══════════════════════════════════════════════
+        private void TodoList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStart = e.GetPosition(null);
+            _dragItem  = (e.OriginalSource as FrameworkElement)?.DataContext as TodoItem;
+        }
+
+        private void TodoList_PreviewMouseMove(object sender, WinMouse e)
+        {
+            if (_dragItem == null || e.LeftButton != MouseButtonState.Pressed) return;
+            var pos   = e.GetPosition(null);
+            var delta = pos - _dragStart;
+            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            DragDrop.DoDragDrop(TodoList, _dragItem, WinDropEffects.Move);
+            _dragItem = null;
+        }
+
+        private void TodoList_Drop(object sender, WinDrag e)
+        {
+            if (_dragItem == null) return;
+            var target = (e.OriginalSource as FrameworkElement)?.DataContext as TodoItem;
+            if (target == null || target == _dragItem) return;
+            var oldIdx = _items.IndexOf(_dragItem);
+            var newIdx = _items.IndexOf(target);
+            if (oldIdx >= 0 && newIdx >= 0) { _items.Move(oldIdx, newIdx); _todoService.SaveTodos(_items); }
+        }
+
+        private void LoadSettings()
+        {
+            var settings = _settingsManager.Settings;
+            _isPinned = settings.TodoIsPinned;
+            _isPassThrough = settings.TodoIsPassThrough;
+
+            // 应用置顶状态
+            this.Topmost = _isPinned;
+            UpdatePinButton();
+
+            // 应用穿透状态
+            ApplyPassThroughState(_isPassThrough);
+        }
+
+        private void SaveSettings()
+        {
+            var settings = _settingsManager.Settings;
+            settings.TodoIsPinned = _isPinned;
+            settings.TodoIsPassThrough = _isPassThrough;
+            _settingsManager.SaveSettings(settings);
+        }
+
+        // ══════════════════════════════════════════════
+        // 置顶显示快捷键：
+        // 按下快捷键 -> 检查是否处于置顶状态
+        // - 置顶状态 -> 取消置顶
+        // - 取消置顶状态 -> 置顶 + 取消穿透
+        // ══════════════════════════════════════════════
+        public void ToggleTopmostAndPassThrough()
+        {
+            if (!IsVisible)
+            {
+                Show();
+            }
+
+            if (_isPinned)
+            {
+                // 当前处于置顶状态 -> 取消置顶
+                _isPinned = false;
+                this.Topmost = false;
+                UpdatePinButton();
+            }
+            else
+            {
+                // 当前处于非置顶状态 -> 置顶 + 取消穿透
+                _isPinned = true;
+                this.Topmost = true;
+                UpdatePinButton();
+
+                // 取消穿透（若处于穿透状态）
+                if (_isPassThrough)
+                {
+                    ApplyPassThroughState(false);
+                }
+            }
+
+            SetTitleButtonsOpacity(0);
+            Activate();
+            _tray?.SyncPinMenuItem();
+            _tray?.SyncPassThroughMenuItem();
+            SaveSettings();
+        }
+
+        // ══════════════════════════════════════════════
+        // 窗口大小与位置记忆 / 恢复 / 越界保护
+        // ══════════════════════════════════════════════
+        private void ApplyInitialOrSavedBounds()
+        {
+            var settings = _settingsManager.Settings;
+            if (settings.TodoWindowLeft.HasValue &&
+                settings.TodoWindowTop.HasValue &&
+                settings.TodoWindowWidth.HasValue &&
+                settings.TodoWindowHeight.HasValue)
+            {
+                double savedLeft   = settings.TodoWindowLeft.Value;
+                double savedTop    = settings.TodoWindowTop.Value;
+                double savedWidth  = Math.Max(MinWidth, settings.TodoWindowWidth.Value);
+                double savedHeight = Math.Max(MinHeight, settings.TodoWindowHeight.Value);
+
+                if (IsWindowBoundsVisible(savedLeft, savedTop, savedWidth, savedHeight))
+                {
+                    Width  = savedWidth;
+                    Height = savedHeight;
+                    Left   = savedLeft;
+                    Top    = savedTop;
+                    return;
+                }
+            }
+
+            // 首次启动或保存的坐标已在屏幕外（如外接显示器断开），恢复默认右上角
+            ResetToDefaultPosition(false);
+        }
+
+        private bool IsWindowBoundsVisible(double left, double top, double width, double height)
+        {
+            try
+            {
+                // 1. 全局虚拟屏幕碰撞检测（DIP 逻辑像素）
+                var virtualRect = new Rect(
+                    SystemParameters.VirtualScreenLeft,
+                    SystemParameters.VirtualScreenTop,
+                    SystemParameters.VirtualScreenWidth,
+                    SystemParameters.VirtualScreenHeight);
+
+                var winRect = new Rect(left, top, width, height);
+                winRect.Intersect(virtualRect);
+
+                // 窗口在可视区域内至少有 60x40 像素的有效面积（确保标题栏可点击）
+                if (winRect.IsEmpty || winRect.Width < 60 || winRect.Height < 40)
+                {
+                    return false;
+                }
+
+                // 2. 真实活动屏幕探测（针对多显示器异形布局盲区）
+                var probePoint = new System.Drawing.Point((int)left + 30, (int)top + 20);
+                var screen = System.Windows.Forms.Screen.FromPoint(probePoint);
+                if (screen != null && screen.Bounds.Contains(probePoint))
+                {
+                    return true;
+                }
+
+                var centerPoint = new System.Drawing.Point((int)(left + width / 2), (int)(top + height / 2));
+                var centerScreen = System.Windows.Forms.Screen.FromPoint(centerPoint);
+                if (centerScreen != null && centerScreen.Bounds.Contains(centerPoint))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        public void ResetToDefaultPosition(bool save = true)
+        {
+            var area = SystemParameters.WorkArea;
+            Width  = 280;
+            Height = Width * 1.3;
+            Left   = area.Right - Width - 20;
+            Top    = area.Top + 20;
+
+            if (save)
+            {
+                SaveWindowBounds();
+            }
+        }
+
+        public void SaveWindowBounds()
+        {
+            if (double.IsNaN(Left) || double.IsNaN(Top) || double.IsNaN(Width) || double.IsNaN(Height) ||
+                double.IsInfinity(Left) || double.IsInfinity(Top) || double.IsInfinity(Width) || double.IsInfinity(Height))
+            {
+                return;
+            }
+
+            var settings = _settingsManager.Settings;
+            settings.TodoWindowLeft   = Left;
+            settings.TodoWindowTop    = Top;
+            settings.TodoWindowWidth  = Math.Max(MinWidth, Width);
+            settings.TodoWindowHeight = Math.Max(MinHeight, Height);
+            _settingsManager.SaveSettings(settings);
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            SaveWindowBounds();
+            if (App.IsExiting)
+            {
+                base.OnClosing(e);
+                return;
+            }
+            e.Cancel = true;
+            Hide();
+        }
+    }
+}
