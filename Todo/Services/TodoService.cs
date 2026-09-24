@@ -34,7 +34,7 @@ namespace WinKit.Todo.Services
         }
 
         /// <summary>
-        /// 持久化保存待办事项列表
+        /// 持久化保存待办事项列表（采用 300ms 后台防抖异步写入，彻底避免 UI 线程磁盘阻塞）
         /// </summary>
         public void SaveTodos(IEnumerable<TodoItem> items)
         {
@@ -44,7 +44,15 @@ namespace WinKit.Todo.Services
             {
                 item.Order = order++;
             }
-            _storage.Save(items);
+            _storage.QueueSave(items, 300);
+        }
+
+        /// <summary>
+        /// 强制立即刷盘（退出或关键操作时调用）
+        /// </summary>
+        public void Flush()
+        {
+            _storage.Flush();
         }
     }
 }

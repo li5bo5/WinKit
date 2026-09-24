@@ -301,20 +301,8 @@ namespace WinKit.Clipboard
                 {
                     _clipboardService.NotifyUpcomingSelfPaste(null, item.ImageHash);
 
-                    bool setOk = false;
-                    for (int i = 0; i < 3 && !setOk; i++)
-                    {
-                        try
-                        {
-                            using var img = DrawingImage.FromFile(item.ImagePath);
-                            System.Windows.Forms.Clipboard.SetImage(img);
-                            setOk = true;
-                        }
-                        catch
-                        {
-                            await Task.Delay(30);
-                        }
-                    }
+                    // 使用非阻塞后台 STA 线程写入图片
+                    bool setOk = await FastClipboard.SetImageFastAsync(item.ImagePath);
                     if (!setOk) return;
 
                     uint seq = NativeMethods.GetClipboardSequenceNumber();
@@ -329,11 +317,12 @@ namespace WinKit.Clipboard
                     {
                         try
                         {
-                            System.Windows.Clipboard.SetText(item.Content);
-                            setOk = true;
+                            // 使用非阻塞的 FastClipboard 写入剪贴板
+                            setOk = await FastClipboard.SetTextFastAsync(item.Content);
                         }
                         catch
                         {
+                            // 若仍然失败，进行短暂延迟后重试
                             await Task.Delay(30);
                         }
                     }
