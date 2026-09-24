@@ -94,25 +94,32 @@
                 </Grid.RowDefinitions>
 
                 <!-- 待办列表 + 空列表占位符（同一 Grid 单元格叠放） -->
-                <Grid Grid.Row="0">
+                <Grid Grid.Row="0" ClipToBounds="True">
                     <ListView x:Name="TodoList"
+                               ClipToBounds="True"
                                Background="Transparent"
                                BorderThickness="0"
+                               ScrollViewer.CanContentScroll="False"
                                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                               VirtualizingPanel.IsVirtualizing="False"
+                               RenderOptions.ClearTypeHint="Enabled"
+                               TextOptions.TextFormattingMode="Display"
                                FocusVisualStyle="{x:Null}"
                                IsTabStop="False"
-                               AllowDrop="True"
                                MouseDoubleClick="TodoList_MouseDoubleClick"
                                PreviewMouseLeftButtonDown="TodoList_PreviewMouseLeftButtonDown"
                                PreviewMouseMove="TodoList_PreviewMouseMove"
-                               Drop="TodoList_Drop">
+                               PreviewMouseLeftButtonUp="TodoList_PreviewMouseLeftButtonUp">
 
                         <!-- 使用自定义 ScrollViewer（细滚动条，自动隐藏） -->
                         <ListView.Template>
                             <ControlTemplate TargetType="ListView">
-                                <ScrollViewer Style="{StaticResource NarrowScrollViewer}"
-                                              Focusable="False">
-                                    <ItemsPresenter/>
+                                <ScrollViewer x:Name="PART_ScrollViewer"
+                                              Style="{StaticResource NarrowScrollViewer}"
+                                              CanContentScroll="False"
+                                              Focusable="False"
+                                              ClipToBounds="True">
+                                    <ItemsPresenter ClipToBounds="True"/>
                                 </ScrollViewer>
                             </ControlTemplate>
                         </ListView.Template>
@@ -176,6 +183,7 @@
                                                 VerticalAlignment="Center"
                                                 Panel.ZIndex="10"
                                                 Opacity="0"
+                                                IsHitTestVisible="False"
                                                 Margin="0,0,4,0">
                                         <!-- 编辑按钮 -->
                                         <Button x:Name="EditBtn"
@@ -198,6 +206,7 @@
                                                  RelativeSource={RelativeSource AncestorType=ListViewItem}}"
                                                  Value="True">
                                         <Setter TargetName="OverlayActions" Property="Opacity" Value="1"/>
+                                        <Setter TargetName="OverlayActions" Property="IsHitTestVisible" Value="True"/>
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>

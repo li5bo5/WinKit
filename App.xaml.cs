@@ -75,7 +75,7 @@ namespace WinKit
             _imageCleanupService = new ImageCleanupService(
                 _settingsManager,
                 () => _clipboardManager.Items.ToList(),
-                itemsToRemove => Dispatcher.Invoke(() => _clipboardManager.RemoveItems(itemsToRemove))
+                itemsToRemove => Dispatcher.BeginInvoke(() => _clipboardManager.RemoveItems(itemsToRemove))
             );
 
             // 4. 监听剪贴板新增条目
@@ -113,7 +113,7 @@ namespace WinKit
 
         private void OnClipboardItemDetected(object? sender, ClipboardItem item)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(() =>
             {
                 _clipboardManager?.AddItem(item);
                 if (item.IsImage)
@@ -125,7 +125,7 @@ namespace WinKit
 
         private void OnQuickPhraseTriggered(IntPtr targetHwnd)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(() =>
             {
                 if (_quickPhraseWindow != null)
                 {
@@ -169,12 +169,12 @@ namespace WinKit
             {
                 if (_quickPhraseWindow != null && _quickPhraseWindow.IsVisible)
                 {
-                    Dispatcher.Invoke(() => _quickPhraseWindow.Hide());
+                    Dispatcher.BeginInvoke(() => _quickPhraseWindow.Hide());
                     return true;
                 }
                 if (_pasteWindow != null && _pasteWindow.IsVisible)
                 {
-                    Dispatcher.Invoke(() => _pasteWindow.Hide());
+                    Dispatcher.BeginInvoke(() => _pasteWindow.Hide());
                     return true;
                 }
                 return false; // 放行 Esc 给前台活动窗口
@@ -183,7 +183,7 @@ namespace WinKit
             // ── 1. 置顶显示快捷键（无条件常驻）───────────────────────
             _keyboardHookService.RegisterHotkey(settings.HotkeyTodoTopToggle, () =>
             {
-                Dispatcher.Invoke(() => _todoWindow?.ToggleTopmostAndPassThrough());
+                Dispatcher.BeginInvoke(() => _todoWindow?.ToggleTopmostAndPassThrough());
             });
 
             // ── 2. 唤出 / 隐藏剪贴板（受剪贴板监控总开关控制）────────
@@ -191,7 +191,7 @@ namespace WinKit
             {
                 _keyboardHookService.RegisterHotkey(settings.HotkeyClipboardToggle, () =>
                 {
-                    Dispatcher.Invoke(() =>
+                    Dispatcher.BeginInvoke(() =>
                     {
                         if (_pasteWindow == null) return;
                         if (_pasteWindow.IsVisible)
@@ -208,7 +208,7 @@ namespace WinKit
         // ══════════════════════════════════════════════
         private void ReloadHotkeys()
         {
-            Dispatcher.Invoke(RegisterAllHotkeys);
+            Dispatcher.BeginInvoke(RegisterAllHotkeys);
         }
 
         protected override void OnExit(ExitEventArgs e)
@@ -230,6 +230,7 @@ namespace WinKit
             _trayHelper?.Dispose();
             _imageCleanupService?.Dispose();
             _clipboardManager?.Dispose();
+            _todoWindow?.Flush();
 
             base.OnExit(e);
         }

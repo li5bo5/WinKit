@@ -161,7 +161,7 @@ namespace WinKit.Common
             }
 
             var ver = asm.GetName().Version;
-            var version = ver != null ? $"{ver.Major}.{ver.Minor}" : "2.5";
+            var version = ver != null ? (ver.Build > 0 ? ver.ToString(3) : $"{ver.Major}.{ver.Minor}") : "2.7.1";
 
             _icon = new SWF.NotifyIcon
             {

@@ -6,8 +6,11 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using WinKit.Common;
 using WinKit.Todo.Models;
 using WinKit.Todo.Services;
@@ -16,6 +19,7 @@ using WinKey         = System.Windows.Input.KeyEventArgs;
 using WinMouse       = System.Windows.Input.MouseEventArgs;
 using WinDrag        = System.Windows.DragEventArgs;
 using WinButton      = System.Windows.Controls.Button;
+using WinPanel       = System.Windows.Controls.Panel;
 using WinDropEffects = System.Windows.DragDropEffects;
 
 namespace WinKit.Todo
@@ -33,9 +37,21 @@ namespace WinKit.Todo
         private readonly RecycleBinService _recycleBinService;
         private readonly SettingsManager _settingsManager;
 
-        // 拖拽排序
-        private WinPoint  _dragStart;
+        // 拖拽平滑排序动画状态
+        private WinPoint _dragStartPos;
+        private WinPoint _lastMousePos;
         private TodoItem? _dragItem;
+        private System.Windows.Controls.ListViewItem? _dragContainer;
+        private bool _isDragging = false;
+        private int _dragStartIndex = -1;
+        private int _targetDropIndex = -1;
+        private double _dragGrabOffsetY = 0;
+        private double _dragStartContainerTopInList = 0;
+        private double _dragStartScrollOffset = 0;
+        private ScrollViewer? _todoScrollViewer;
+        private DispatcherTimer? _autoScrollTimer;
+        private double _autoScrollVelocity = 0;
+        private readonly List<(double Top, double Height)> _itemInitialBounds = new();
 
         // 窗口调整大小
         private bool _isResizing;
@@ -65,7 +81,24 @@ namespace WinKit.Todo
 
         private const int WM_MOVING = 0x0216;
         private const int WM_SHOWWINDOW = 0x0018;
-        private const int SW_PARENTCLOSING = 3;
+        private const int SW_PARENTCLOSING = 1;
+        private const int SW_OTHERZOOM = 2;
+        private const int WM_WINDOWPOSCHANGING = 0x0046;
+        private const int SWP_HIDEWINDOW = 0x0080;
+        private const int WM_SYSCOMMAND = 0x0112;
+        private const int SC_MINIMIZE = 0xF020;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WINDOWPOS
+        {
+            public IntPtr hwnd;
+            public IntPtr hwndInsertAfter;
+            public int x;
+            public int y;
+            public int cx;
+            public int cy;
+            public uint flags;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
@@ -87,6 +120,37 @@ namespace WinKit.Todo
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
 
+        private bool _isExplicitlyHiding = false;
+
+        public void SafeHide()
+        {
+            _isExplicitlyHiding = true;
+            try
+            {
+                StopPassThroughMonitor();
+                Hide();
+            }
+            finally
+            {
+                _isExplicitlyHiding = false;
+            }
+        }
+
+        private void MainWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if ((bool)e.NewValue)
+            {
+                if (_isPassThrough)
+                {
+                    StartPassThroughMonitor();
+                }
+            }
+            else
+            {
+                StopPassThroughMonitor();
+            }
+        }
+
         [DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hwnd, int index);
 
@@ -96,6 +160,12 @@ namespace WinKit.Todo
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out POINT lpPoint);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
+
         // ══════════════════════════════════════════════
         // 构造函数
         // ══════════════════════════════════════════════
@@ -104,8 +174,13 @@ namespace WinKit.Todo
             InitializeComponent();
             _settingsManager = settingsManager;
 
-            // 确保窗口句柄创建，以便后续初始化设置和 Win32 钩子正常运行
-            new WindowInteropHelper(this).EnsureHandle();
+            // 监听窗口可见性切换以启停穿透监听器
+            IsVisibleChanged += MainWindow_IsVisibleChanged;
+
+            // 确保窗口句柄创建并立即挂钩 WndProc，确保 Win+D 等底层拦截从第一毫秒起生效
+            var hwnd = new WindowInteropHelper(this).EnsureHandle();
+            var hwndSource = HwndSource.FromHwnd(hwnd);
+            hwndSource?.AddHook(WndProc);
 
             _todoService = new TodoService();
             _recycleBinService = new RecycleBinService(_settingsManager);
@@ -118,6 +193,21 @@ namespace WinKit.Todo
 
             // 订阅状态变化：免疫 Win+D 强制最小化
             StateChanged += MainWindow_StateChanged;
+
+            // 监听鼠标捕获丢失，安全终止拖拽与滚屏并复位视觉
+            TodoList.LostMouseCapture += (s, e) =>
+            {
+                if (_isDragging)
+                {
+                    ResetAllDragVisuals();
+                    _isDragging = false;
+                    _dragItem = null;
+                    _dragContainer = null;
+                    _dragStartIndex = -1;
+                    _targetDropIndex = -1;
+                    _itemInitialBounds.Clear();
+                }
+            };
 
             // 初始化或恢复保存的窗口位置与大小
             ApplyInitialOrSavedBounds();
@@ -159,18 +249,17 @@ namespace WinKit.Todo
             if (WindowState == WindowState.Minimized)
             {
                 WindowState = WindowState.Normal;
+                if (!IsVisible) Show();
             }
         }
 
         // ══════════════════════════════════════════════
-        // 窗口初始化：挂钩 WndProc 并注入 WS_EX_TOOLWINDOW
+        // 窗口初始化：注入 WS_EX_TOOLWINDOW 并绑定宿主
         // ══════════════════════════════════════════════
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
             var hwnd = new WindowInteropHelper(this).Handle;
-            var hwndSource = HwndSource.FromHwnd(hwnd);
-            hwndSource?.AddHook(WndProc);
 
             int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             extendedStyle |= WS_EX_TOOLWINDOW;
@@ -179,15 +268,54 @@ namespace WinKit.Todo
                 extendedStyle |= WS_EX_TRANSPARENT;
             }
             SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle);
+
+            // 将宿主所有者关联到桌面 Progman，在操作系统 Z-Order 树中将其确立为桌面从属层，不受显示桌面影响
+            IntPtr progman = FindWindow("Progman", null);
+            if (progman != IntPtr.Zero)
+            {
+                try
+                {
+                    new WindowInteropHelper(this).Owner = progman;
+                }
+                catch { }
+            }
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // 1. 免疫 Win + D（显示桌面）：拦截 SW_PARENTCLOSING
-            if (msg == WM_SHOWWINDOW && wParam == IntPtr.Zero && lParam.ToInt32() == SW_PARENTCLOSING)
+            // 1. 免疫 Win + D（显示桌面）：多重防御拦截
+            // A. 拦截系统命令最小化 (Win+M 或 Win+D 触发的最小化)
+            if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
             {
                 handled = true;
                 return IntPtr.Zero;
+            }
+
+            // B. 拦截非显式主动调用的隐藏指令 (Win+D 发送的 WM_SHOWWINDOW 消息)
+            if (msg == WM_SHOWWINDOW && wParam == IntPtr.Zero)
+            {
+                if (!_isExplicitlyHiding)
+                {
+                    handled = true;
+                    // Win+D 触发后，确保窗口持续浮在桌面之上，不被提升的前台桌面遮盖
+                    EnsureWindowAboveDesktop();
+                    return IntPtr.Zero;
+                }
+            }
+
+            // C. 拦截通过 SetWindowPos 强制注入 SWP_HIDEWINDOW 的外部指令
+            if (msg == WM_WINDOWPOSCHANGING && !_isExplicitlyHiding)
+            {
+                try
+                {
+                    var pos = Marshal.PtrToStructure<WINDOWPOS>(lParam);
+                    if ((pos.flags & (uint)SWP_HIDEWINDOW) != 0)
+                    {
+                        pos.flags &= ~((uint)SWP_HIDEWINDOW);
+                        Marshal.StructureToPtr(pos, lParam, false);
+                    }
+                }
+                catch { }
             }
 
             // 2. 接收来自新进程的激活广播消息
@@ -243,6 +371,36 @@ namespace WinKit.Todo
             return IntPtr.Zero;
         }
 
+        private void EnsureWindowAboveDesktop()
+        {
+            Action updatePos = () =>
+            {
+                var h = new WindowInteropHelper(this).Handle;
+                if (h != IntPtr.Zero && IsVisible)
+                {
+                    if (_isPinned)
+                    {
+                        SetWindowPos(h, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
+                    }
+                    else
+                    {
+                        // 非置顶状态：先刷到 TOPMOST 再落回 NOTOPMOST，确保窗口跃居于刚提升的桌面之上但保持非置顶
+                        SetWindowPos(h, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
+                        SetWindowPos(h, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
+                    }
+                }
+            };
+
+            // 1. 立即刷新一次
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, updatePos);
+
+            // 2. 50ms 延时再次确认，跨越 Windows Shell 显示桌面切换的动画滞后
+            Task.Delay(50).ContinueWith(_ =>
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Render, updatePos);
+            });
+        }
+
         // ══════════════════════════════════════════════
         // TitleBar 区域悬停：严格鼠标悬停显隐控制
         // ══════════════════════════════════════════════
@@ -284,7 +442,7 @@ namespace WinKit.Todo
         // ══════════════════════════════════════════════
         // 标题栏按钮
         // ══════════════════════════════════════════════
-        private void CloseBtn_Click(object sender, RoutedEventArgs e) => Hide();
+        private void CloseBtn_Click(object sender, RoutedEventArgs e) => SafeHide();
 
         private void PinBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -302,6 +460,14 @@ namespace WinKit.Todo
             _isPinned    = !_isPinned;
             this.Topmost = _isPinned;
             UpdatePinButton();
+
+            // 若取消置顶，且当前正处于穿透模式，则必须同步关闭穿透模式，避免非置顶穿透被下层窗口遮挡
+            if (!_isPinned && _isPassThrough)
+            {
+                ApplyPassThroughState(false);
+                _tray?.SyncPassThroughMenuItem();
+            }
+
             SaveSettings();
         }
 
@@ -333,6 +499,97 @@ namespace WinKit.Todo
             SaveSettings();
         }
 
+        private DispatcherTimer? _passThroughMonitorTimer;
+        private bool _isPassThroughHovered = false;
+
+        private void StartPassThroughMonitor()
+        {
+            if (_passThroughMonitorTimer == null)
+            {
+                _passThroughMonitorTimer = new DispatcherTimer(DispatcherPriority.Normal)
+                {
+                    Interval = TimeSpan.FromMilliseconds(40)
+                };
+                _passThroughMonitorTimer.Tick += PassThroughMonitorTimer_Tick;
+            }
+            _passThroughMonitorTimer.Start();
+        }
+
+        private void StopPassThroughMonitor()
+        {
+            _passThroughMonitorTimer?.Stop();
+            _isPassThroughHovered = false;
+        }
+
+        private void PassThroughMonitorTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!_isPassThrough || !IsVisible || WindowState == WindowState.Minimized)
+            {
+                StopPassThroughMonitor();
+                return;
+            }
+
+            // 若当前有正在交互的弹窗或偏好设置窗口，保持控制按钮可点击状态，暂不恢复穿透
+            if (IsPreferencesWindowOpen || ActiveEditDialog != null)
+            {
+                return;
+            }
+
+            if (!GetCursorPos(out POINT screenPoint)) return;
+
+            WinPoint relPos;
+            try
+            {
+                relPos = PointFromScreen(new WinPoint(screenPoint.X, screenPoint.Y));
+            }
+            catch
+            {
+                return;
+            }
+
+            // 顶部区域：涵盖 TitleBar 范围（高度 40px，向外宽容 4px 缓冲区以便顺滑移入）
+            double barHeight = TitleBar.ActualHeight > 0 ? TitleBar.ActualHeight : 40;
+            bool inTitleBarZone = (relPos.X >= 0 && relPos.X <= ActualWidth && relPos.Y >= 0 && relPos.Y <= barHeight + 4);
+
+            if (inTitleBarZone)
+            {
+                if (!_isPassThroughHovered)
+                {
+                    _isPassThroughHovered = true;
+                    // 1. 自动浮现顶部控制按钮
+                    SetTitleButtonsOpacity(1);
+                    // 2. 临时剥除 WS_EX_TRANSPARENT 穿透样式，使控制按钮能够正常接收点击与 Hover
+                    SetWindowPassThrough(false);
+                }
+            }
+            else
+            {
+                if (_isPassThroughHovered)
+                {
+                    _isPassThroughHovered = false;
+                    // 1. 自动隐藏顶部控制按钮
+                    SetTitleButtonsOpacity(0);
+                    // 2. 恢复 WS_EX_TRANSPARENT 鼠标穿透样式
+                    SetWindowPassThrough(true);
+                }
+            }
+        }
+
+        private void SetWindowPassThrough(bool transparent)
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            if (transparent)
+            {
+                SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT);
+            }
+            else
+            {
+                SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
+            }
+        }
+
         private void ApplyPassThroughState(bool isPassThrough)
         {
             _isPassThrough = isPassThrough;
@@ -340,20 +597,29 @@ namespace WinKit.Todo
             if (_isPassThrough)
             {
                 ResizeGripArea.Opacity = 0;
+                // 开启穿透模式时，必须默认置顶，防止穿透点击下层窗口时导致 TodoList 被下层窗口覆盖
+                if (!_isPinned)
+                {
+                    _isPinned = true;
+                    this.Topmost = true;
+                    UpdatePinButton();
+                    _tray?.SyncPinMenuItem();
+                }
             }
 
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd != IntPtr.Zero)
             {
-                int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 if (_isPassThrough)
                 {
                     SetTitleButtonsOpacity(0);
-                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT);
+                    SetWindowPassThrough(true);
+                    StartPassThroughMonitor();
                 }
                 else
                 {
-                    SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
+                    StopPassThroughMonitor();
+                    SetWindowPassThrough(false);
                 }
             }
         }
@@ -481,7 +747,7 @@ namespace WinKit.Todo
         public void HideInlineInputAndWindow()
         {
             HideInlineInput();
-            Hide();
+            SafeHide();
         }
 
         private void UpdateEmptyPlaceholder()
@@ -564,9 +830,6 @@ namespace WinKit.Todo
                     else
                     {
                         item.Title = dlg.ResultText;
-                        var idx = _items.IndexOf(item);
-                        _items.RemoveAt(idx);
-                        _items.Insert(idx, item);
                         _todoService.SaveTodos(_items);
                     }
                 }
@@ -588,33 +851,389 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // 拖拽排序
+        // 拖拽排序与平滑位移动画
         // ══════════════════════════════════════════════
+        private bool IsClickOnInteractiveControl(DependencyObject? src)
+        {
+            while (src != null && src != TodoList)
+            {
+                if (src is System.Windows.Controls.Button || src is System.Windows.Controls.Primitives.ButtonBase)
+                    return true;
+                src = System.Windows.Media.VisualTreeHelper.GetParent(src);
+            }
+            return false;
+        }
+
+        private ScrollViewer? GetTodoScrollViewer()
+        {
+            if (_todoScrollViewer != null) return _todoScrollViewer;
+            if (TodoList.Template != null)
+            {
+                _todoScrollViewer = TodoList.Template.FindName("PART_ScrollViewer", TodoList) as ScrollViewer;
+            }
+            if (_todoScrollViewer == null)
+            {
+                _todoScrollViewer = FindVisualChild<ScrollViewer>(TodoList);
+            }
+            return _todoScrollViewer;
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typed) return typed;
+                var descendant = FindVisualChild<T>(child);
+                if (descendant != null) return descendant;
+            }
+            return null;
+        }
+
+        private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                if (current is T match) return match;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        private void StartAutoScrollTimer()
+        {
+            if (_autoScrollTimer == null)
+            {
+                _autoScrollTimer = new DispatcherTimer(DispatcherPriority.Render)
+                {
+                    Interval = TimeSpan.FromMilliseconds(20)
+                };
+                _autoScrollTimer.Tick += AutoScrollTimer_Tick;
+            }
+            _autoScrollTimer.Start();
+        }
+
+        private void StopAutoScrollTimer()
+        {
+            _autoScrollVelocity = 0;
+            _autoScrollTimer?.Stop();
+        }
+
+        private void AutoScrollTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!_isDragging || _autoScrollVelocity == 0) return;
+
+            var sv = GetTodoScrollViewer();
+            if (sv == null || sv.ScrollableHeight <= 0) return;
+
+            double oldOffset = sv.VerticalOffset;
+            double newOffset = Math.Clamp(oldOffset + _autoScrollVelocity, 0, sv.ScrollableHeight);
+            if (Math.Abs(newOffset - oldOffset) > 0.1)
+            {
+                sv.ScrollToVerticalOffset(newOffset);
+                UpdateDragPositionAndSlots();
+            }
+        }
+
+        private void CheckAutoScrollZone(WinPoint currentPos)
+        {
+            const double edgeThreshold = 36.0;
+            double listHeight = TodoList.ActualHeight;
+
+            if (listHeight <= 0)
+            {
+                _autoScrollVelocity = 0;
+                return;
+            }
+
+            if (currentPos.Y < edgeThreshold)
+            {
+                // 向上滚动：像素步长 2px ~ 9px
+                double d = edgeThreshold - currentPos.Y;
+                _autoScrollVelocity = -Math.Min(9.0, Math.Max(2.0, d * 0.25));
+            }
+            else if (currentPos.Y > listHeight - edgeThreshold)
+            {
+                // 向下滚动：像素步长 2px ~ 9px
+                double d = currentPos.Y - (listHeight - edgeThreshold);
+                _autoScrollVelocity = Math.Min(9.0, Math.Max(2.0, d * 0.25));
+            }
+            else
+            {
+                _autoScrollVelocity = 0;
+            }
+        }
+
         private void TodoList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            _dragStart = e.GetPosition(null);
-            _dragItem  = (e.OriginalSource as FrameworkElement)?.DataContext as TodoItem;
+            if (IsClickOnInteractiveControl(e.OriginalSource as DependencyObject))
+            {
+                _dragItem = null;
+                _dragContainer = null;
+                return;
+            }
+
+            var container = FindAncestor<System.Windows.Controls.ListViewItem>(e.OriginalSource as DependencyObject);
+            if (container != null && container.DataContext is TodoItem item)
+            {
+                _dragItem = item;
+                _dragContainer = container;
+                _dragStartPos = e.GetPosition(TodoList);
+                _lastMousePos = _dragStartPos;
+                _isDragging = false;
+                _dragStartIndex = _items.IndexOf(item);
+                _targetDropIndex = _dragStartIndex;
+
+                _dragGrabOffsetY = e.GetPosition(_dragContainer).Y;
+                _dragStartContainerTopInList = _dragContainer.TranslatePoint(new WinPoint(0, 0), TodoList).Y;
+
+                var sv = GetTodoScrollViewer();
+                _dragStartScrollOffset = sv?.VerticalOffset ?? 0;
+            }
         }
 
         private void TodoList_PreviewMouseMove(object sender, WinMouse e)
         {
-            if (_dragItem == null || e.LeftButton != MouseButtonState.Pressed) return;
-            var pos   = e.GetPosition(null);
-            var delta = pos - _dragStart;
-            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance &&
-                Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-            DragDrop.DoDragDrop(TodoList, _dragItem, WinDropEffects.Move);
-            _dragItem = null;
+            if (_dragItem == null || _dragContainer == null || e.LeftButton != MouseButtonState.Pressed)
+                return;
+
+            var currentPos = e.GetPosition(TodoList);
+            _lastMousePos = currentPos;
+            var deltaY = currentPos.Y - _dragStartPos.Y;
+
+            // 移动超过阈值才启动拖拽状态，保护正常单击与双击
+            if (!_isDragging && Math.Abs(deltaY) > 4)
+            {
+                _isDragging = true;
+                TodoList.CaptureMouse();
+                WinPanel.SetZIndex(_dragContainer, 999);
+                _dragContainer.Opacity = 0.88;
+
+                var sv = GetTodoScrollViewer();
+                _dragStartScrollOffset = sv?.VerticalOffset ?? 0;
+                _dragStartContainerTopInList = _dragContainer.TranslatePoint(new WinPoint(0, 0), TodoList).Y;
+
+                // 确保所有容器都有全新的、未冻结的独立 TranslateTransform，并一次性缓存初始几何坐标
+                _itemInitialBounds.Clear();
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    var container = TodoList.ItemContainerGenerator.ContainerFromItem(_items[i]) as System.Windows.Controls.ListViewItem;
+                    if (container != null)
+                    {
+                        if (container.RenderTransform is not TranslateTransform trans || trans.IsFrozen)
+                        {
+                            container.RenderTransform = new TranslateTransform(0, 0);
+                        }
+                        double top = container.TranslatePoint(new WinPoint(0, 0), TodoList).Y;
+                        _itemInitialBounds.Add((top, container.ActualHeight));
+                    }
+                    else
+                    {
+                        _itemInitialBounds.Add((0, 0));
+                    }
+                }
+
+                StartAutoScrollTimer();
+            }
+
+            if (!_isDragging) return;
+
+            // 检查边缘自动滚动感应区
+            CheckAutoScrollZone(currentPos);
+
+            // 更新被拖拽项坐标与插槽避让动画
+            UpdateDragPositionAndSlots(currentPos);
         }
 
-        private void TodoList_Drop(object sender, WinDrag e)
+        private void UpdateDragPositionAndSlots(WinPoint? mousePos = null)
         {
-            if (_dragItem == null) return;
-            var target = (e.OriginalSource as FrameworkElement)?.DataContext as TodoItem;
-            if (target == null || target == _dragItem) return;
-            var oldIdx = _items.IndexOf(_dragItem);
-            var newIdx = _items.IndexOf(target);
-            if (oldIdx >= 0 && newIdx >= 0) { _items.Move(oldIdx, newIdx); _todoService.SaveTodos(_items); }
+            if (!_isDragging || _dragContainer == null || _dragItem == null) return;
+
+            var currentPos = mousePos ?? _lastMousePos;
+            var sv = GetTodoScrollViewer();
+            double currentScrollOffset = sv?.VerticalOffset ?? 0;
+
+            // 1. 计算视觉目标 Top 并进行严格边界钳制 (Clamp)
+            // 目标：让被拖动物项完全在 [0, TodoList.ActualHeight - itemHeight] 之间，绝不飞出可视区域
+            double desiredVisualTop = currentPos.Y - _dragGrabOffsetY;
+            double maxVisualTop = Math.Max(0, TodoList.ActualHeight - _dragContainer.ActualHeight);
+            double clampedVisualTop = Math.Clamp(desiredVisualTop, 0, maxVisualTop);
+
+            // 2. 根据当前 ScrollViewer 滚动物理偏移，计算出当前条目无 Transform 时的实际 Top
+            double scrollDelta = currentScrollOffset - _dragStartScrollOffset;
+            double currentBaseTop = _dragStartContainerTopInList - scrollDelta;
+            double transformY = clampedVisualTop - currentBaseTop;
+
+            if (_dragContainer.RenderTransform is TranslateTransform dragTransform && !dragTransform.IsFrozen)
+            {
+                dragTransform.Y = transformY;
+            }
+            else
+            {
+                _dragContainer.RenderTransform = new TranslateTransform(0, transformY);
+            }
+
+            // 3. 计算目标插入插槽（Target Drop Index）
+            // 关键策略：
+            // A. 顶部贴边吸附：当拖动到最顶部区域，直接锁定第 0 项！
+            // B. 底部贴边吸附：当拖动到最底部区域，直接锁定末项！
+            // C. 中间区域：利用缓存坐标线性计算基准中心，只要拖拽项中心跨越目标项中线（50%），立刻响应避让，零延迟不卡顿！
+
+            int newTargetIndex = _dragStartIndex;
+
+            bool isAtTopEdge = clampedVisualTop <= 6 || (currentPos.Y <= 28 && (sv == null || sv.VerticalOffset <= 2));
+            bool isAtBottomEdge = (clampedVisualTop >= maxVisualTop - 6 && maxVisualTop > 0) || 
+                                  (currentPos.Y >= TodoList.ActualHeight - 28 && (sv == null || sv.VerticalOffset >= (sv.ScrollableHeight - 2)));
+
+            if (isAtTopEdge)
+            {
+                newTargetIndex = 0;
+            }
+            else if (isAtBottomEdge)
+            {
+                newTargetIndex = _items.Count - 1;
+            }
+            else
+            {
+                double dragCenterY = clampedVisualTop + _dragContainer.ActualHeight / 2;
+
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    if (i == _dragStartIndex || i >= _itemInitialBounds.Count) continue;
+
+                    // 高性能基准中心计算：消除高频 TranslatePoint 矩阵变换与虚假动画干扰
+                    double otherBaseCenterY = _itemInitialBounds[i].Top - scrollDelta + _itemInitialBounds[i].Height / 2;
+
+                    if (i < _dragStartIndex)
+                    {
+                        // 向上跨越：只要拖拽中心越过对方中线，立即让位
+                        if (dragCenterY < otherBaseCenterY)
+                        {
+                            newTargetIndex = Math.Min(newTargetIndex, i);
+                        }
+                    }
+                    else if (i > _dragStartIndex)
+                    {
+                        // 向下跨越：只要拖拽中心越过对方中线，立即让位
+                        if (dragCenterY > otherBaseCenterY)
+                        {
+                            newTargetIndex = Math.Max(newTargetIndex, i);
+                        }
+                    }
+                }
+            }
+
+            // 4. 当目标插槽改变时，触发平滑的避让挤开动画
+            if (newTargetIndex != _targetDropIndex)
+            {
+                _targetDropIndex = newTargetIndex;
+                double itemHeight = _dragContainer.ActualHeight + 4; // 包含上下 Margin
+
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    if (i == _dragStartIndex) continue;
+                    var container = TodoList.ItemContainerGenerator.ContainerFromItem(_items[i]) as System.Windows.Controls.ListViewItem;
+                    if (container == null) continue;
+
+                    double targetOffsetY = 0;
+                    if (_targetDropIndex > _dragStartIndex)
+                    {
+                        // 向下拖动：跨过的项向上挪出空位
+                        if (i > _dragStartIndex && i <= _targetDropIndex)
+                        {
+                            targetOffsetY = -itemHeight;
+                        }
+                    }
+                    else if (_targetDropIndex < _dragStartIndex)
+                    {
+                        // 向上拖动：跨过的项向下挪出空位
+                        if (i >= _targetDropIndex && i < _dragStartIndex)
+                        {
+                            targetOffsetY = itemHeight;
+                        }
+                    }
+
+                    if (container.RenderTransform is not TranslateTransform trans || trans.IsFrozen)
+                    {
+                        trans = new TranslateTransform(0, 0);
+                        container.RenderTransform = trans;
+                    }
+
+                    var anim = new DoubleAnimation(targetOffsetY, new Duration(TimeSpan.FromMilliseconds(160)))
+                    {
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                    };
+                    trans.BeginAnimation(TranslateTransform.YProperty, anim);
+                }
+            }
+        }
+
+        private void ResetAllDragVisuals()
+        {
+            StopAutoScrollTimer();
+            foreach (var it in _items)
+            {
+                var container = TodoList.ItemContainerGenerator.ContainerFromItem(it) as System.Windows.Controls.ListViewItem;
+                if (container != null)
+                {
+                    WinPanel.SetZIndex(container, 0);
+                    container.Opacity = 1.0;
+                    if (container.RenderTransform is TranslateTransform trans && !trans.IsFrozen)
+                    {
+                        trans.BeginAnimation(TranslateTransform.YProperty, null);
+                        trans.Y = 0;
+                    }
+                    container.RenderTransform = new TranslateTransform(0, 0);
+                }
+            }
+        }
+
+        private void TodoList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isDragging)
+            {
+                _dragItem = null;
+                _dragContainer = null;
+                return;
+            }
+
+            int fromIndex = _dragStartIndex;
+            int toIndex = _targetDropIndex;
+            var dragItem = _dragItem;
+
+            // 关键：必须在 ReleaseMouseCapture 之前将 _isDragging 设为 false，
+            // 避免 Release 激发的 LostMouseCapture 事件将目标索引意外重置为 -1
+            _isDragging = false;
+            _dragItem = null;
+            _dragContainer = null;
+            _dragStartIndex = -1;
+            _targetDropIndex = -1;
+            _itemInitialBounds.Clear();
+
+            TodoList.ReleaseMouseCapture();
+
+            // 1. 彻底清除并复位所有容器上的动画与偏移，确保绝无任何残留 Transform
+            ResetAllDragVisuals();
+
+            // 2. 执行数据重排与保存
+            if (toIndex >= 0 && toIndex != fromIndex && toIndex < _items.Count && dragItem != null)
+            {
+                _items.Move(fromIndex, toIndex);
+                _todoService.SaveTodos(_items);
+                AnimateItemFadeIn(dragItem);
+            }
+
+            e.Handled = true;
+        }
+
+        private void AnimateItemFadeIn(TodoItem item)
+        {
+            var container = TodoList.ItemContainerGenerator.ContainerFromItem(item) as System.Windows.Controls.ListViewItem;
+            if (container == null) return;
+            var fade = new DoubleAnimation(0.5, 1.0, new Duration(TimeSpan.FromMilliseconds(200)));
+            container.BeginAnimation(UIElement.OpacityProperty, fade);
         }
 
         private void LoadSettings()
@@ -783,16 +1402,25 @@ namespace WinKit.Todo
             _settingsManager.SaveSettings(settings);
         }
 
+        /// <summary>
+        /// 确保待办数据立即刷盘
+        /// </summary>
+        public void Flush()
+        {
+            _todoService.Flush();
+        }
+
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             SaveWindowBounds();
+            _todoService.Flush();
             if (App.IsExiting)
             {
                 base.OnClosing(e);
                 return;
             }
             e.Cancel = true;
-            Hide();
+            SafeHide();
         }
     }
 }

@@ -486,22 +486,65 @@ namespace WinKit.Common
         /// </summary>
         public static void SimulateCtrlV()
         {
-            // 确保物理 Win 键释放，防止误触发系统快捷键
+            SimulateCtrlVDirect();
+        }
+
+        /// <summary>
+        /// 使用 Windows 原生 SendInput 高效模拟 Ctrl+V 粘贴动作，绝不阻塞 UI 线程
+        /// </summary>
+        public static void SimulateCtrlVDirect()
+        {
+            // 确保物理 Win 键释放，防止误触发系统开始菜单
             keybd_event((byte)VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
             keybd_event((byte)VK_RWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
 
-            // 1. Ctrl Down
-            keybd_event((byte)VK_CTRL, 0, 0, UIntPtr.Zero);
-            System.Threading.Thread.Sleep(15);
+            int inputSize = Marshal.SizeOf(typeof(INPUT));
+            var inputs = new INPUT[]
+            {
+                // Ctrl Down
+                new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT { wVk = (ushort)VK_CTRL, dwFlags = 0 }
+                    }
+                },
+                // V Down
+                new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT { wVk = (ushort)VK_V, dwFlags = 0 }
+                    }
+                },
+                // V Up
+                new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT { wVk = (ushort)VK_V, dwFlags = KEYEVENTF_KEYUP }
+                    }
+                },
+                // Ctrl Up
+                new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT { wVk = (ushort)VK_CTRL, dwFlags = KEYEVENTF_KEYUP }
+                    }
+                }
+            };
 
-            // 2. V Down & Up
-            keybd_event((byte)VK_V, 0, 0, UIntPtr.Zero);
-            System.Threading.Thread.Sleep(25);
-            keybd_event((byte)VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            System.Threading.Thread.Sleep(15);
+            SendInput((uint)inputs.Length, inputs, inputSize);
+        }
 
-            // 3. Ctrl Up
-            keybd_event((byte)VK_CTRL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        public static async Task SimulateCtrlVAsync()
+        {
+            await Task.Run(() => SimulateCtrlVDirect());
         }
 
         /// <summary>

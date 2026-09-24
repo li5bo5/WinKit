@@ -65,6 +65,25 @@ namespace WinKit.Todo
             Hide();
         }
 
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                Hide();
+                e.Handled = true;
+            }
+        }
+
+        protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+        {
+            base.OnPreviewKeyDown(e);
+            if (e.Key == Key.Escape)
+            {
+                Hide();
+                e.Handled = true;
+            }
+        }
+
         private void ClearAllBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_items.Count == 0) return;
