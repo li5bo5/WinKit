@@ -19,6 +19,10 @@ AGENTS.md
 ## ── 构建产物与编译输出 (Build Results & Artifacts) ─────────
 [Bb]in/
 [Oo]bj/
+/Publish/
+/Release/
+Publish/
+Release/
 [Aa]pp[Pp]ackages/
 BundleArtifacts/
 _ReSharper*/
