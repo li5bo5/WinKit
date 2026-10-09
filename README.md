@@ -110,10 +110,10 @@ WinKit 采用绿色便携化设计，所有数据与配置文件均统一存放�
 
 ```powershell
 # 1. 编译并打包：框架依赖版 (Framework-Dependent)
-dotnet publish WinKit.csproj -c Release -r win-x64 --self-contained false -o bin\Publish\FrameworkDependent_V2.6
+dotnet publish WinKit.csproj -c Release -r win-x64 --self-contained false -o Publish\FrameworkDependent_V2.8
 
 # 2. 编译并打包：独立免装版 (Self-Contained)
-dotnet publish WinKit.csproj -c Release -r win-x64 --self-contained true -o bin\Publish\SelfContained_V2.6
+dotnet publish WinKit.csproj -c Release -r win-x64 --self-contained true -o Publish\SelfContained_V2.8
 ```
 
 ---
