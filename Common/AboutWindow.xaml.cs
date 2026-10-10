@@ -23,6 +23,10 @@ namespace WinKit.Common
                 string vStr = (version.Build > 0) ? version.ToString(3) : $"{version.Major}.{version.Minor}";
                 VersionText.Text = $"v{vStr}";
             }
+            else
+            {
+                VersionText.Text = "未知";
+            }
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

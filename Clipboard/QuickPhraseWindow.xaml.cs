@@ -48,7 +48,7 @@ namespace WinKit.Clipboard
 
             _mouseMonitor.ClickedOutside += () =>
             {
-                Dispatcher.Invoke(() =>
+                Dispatcher.BeginInvoke(() =>
                 {
                     if (IsVisible) Hide();
                 });
@@ -217,9 +217,11 @@ namespace WinKit.Clipboard
             }
         }
 
+        private bool _isPasting = false;
+
         /// <summary>
         /// 独立安全回填选中的短语：
-        /// 1. 自动备份用户原有剪贴板（文本/图片）
+        /// 1. 自动备份用户原有剪贴板（全格式 DataObject 快照）
         /// 2. 注入短语并附加 Windows 10/11 防记录标记（阻止 Win+V 历史记录与云同步）
         /// 3. 开启 WinKit 内部回填锁，绝不写入 WinKit 剪贴板历史
         /// 4. 模拟 Ctrl+V 粘贴，全软件 100% 稳定兼容
@@ -227,26 +229,19 @@ namespace WinKit.Clipboard
         /// </summary>
         private async void UseSelectedPhrase(QuickPhraseItem item)
         {
-            if (item == null || string.IsNullOrEmpty(item.Content)) return;
+            if (item == null || string.IsNullOrEmpty(item.Content) || _isPasting) return;
+            _isPasting = true;
 
             try
             {
                 // 开启内部主动回填锁，防止被自身监控误判
                 _clipboardService.BeginInternalPaste();
 
-                // 1. 备份用户当前剪贴板现场（文本或图片）
-                string? backupText = null;
-                System.Windows.Media.Imaging.BitmapSource? backupImage = null;
+                // 1. 全格式备份用户当前剪贴板现场
+                System.Windows.IDataObject? snapshot = null;
                 try
                 {
-                    if (System.Windows.Clipboard.ContainsText())
-                    {
-                        backupText = System.Windows.Clipboard.GetText();
-                    }
-                    else if (System.Windows.Clipboard.ContainsImage())
-                    {
-                        backupImage = System.Windows.Clipboard.GetImage();
-                    }
+                    snapshot = System.Windows.Clipboard.GetDataObject();
                 }
                 catch
                 {
@@ -300,51 +295,28 @@ namespace WinKit.Clipboard
                     await Task.Delay(35);
                 }
 
-                // 7. 模拟 Ctrl+V 粘贴
-                NativeMethods.SimulateCtrlV();
+                // 7. 模拟 Ctrl+V 粘贴（确保前台不是本进程窗口，防止误贴进自身）
+                if (!NativeMethods.IsOwnWindow(GetForegroundWindow()))
+                {
+                    NativeMethods.SimulateCtrlV();
+                }
 
-                // 8. 等待目标应用读取剪贴板完毕后（120ms），立即将用户的原有剪贴板原封不动恢复回去！
+                // 8. 等待目标应用读取剪贴板完毕后（120ms），立即将用户的原有剪贴板原封不动全格式恢复回去！
                 await Task.Delay(120);
 
-                if (backupText != null)
+                if (snapshot != null)
                 {
-                    _clipboardService.NotifyUpcomingSelfPaste(backupText);
                     for (int r = 0; r < 3; r++)
                     {
                         try
                         {
-                            System.Windows.Clipboard.SetText(backupText);
+                            System.Windows.Clipboard.SetDataObject(snapshot, true);
                             break;
                         }
                         catch
                         {
                             await Task.Delay(25);
                         }
-                    }
-                }
-                else if (backupImage != null)
-                {
-                    for (int r = 0; r < 3; r++)
-                    {
-                        try
-                        {
-                            System.Windows.Clipboard.SetImage(backupImage);
-                            break;
-                        }
-                        catch
-                        {
-                            await Task.Delay(25);
-                        }
-                    }
-                }
-                else
-                {
-                    try
-                    {
-                        System.Windows.Clipboard.Clear();
-                    }
-                    catch
-                    {
                     }
                 }
             }
@@ -355,6 +327,7 @@ namespace WinKit.Clipboard
             finally
             {
                 _clipboardService.EndInternalPaste();
+                _isPasting = false;
             }
         }
 

@@ -268,17 +268,6 @@ namespace WinKit.Todo
                 extendedStyle |= WS_EX_TRANSPARENT;
             }
             SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle);
-
-            // 将宿主所有者关联到桌面 Progman，在操作系统 Z-Order 树中将其确立为桌面从属层，不受显示桌面影响
-            IntPtr progman = FindWindow("Progman", null);
-            if (progman != IntPtr.Zero)
-            {
-                try
-                {
-                    new WindowInteropHelper(this).Owner = progman;
-                }
-                catch { }
-            }
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -329,36 +318,53 @@ namespace WinKit.Todo
                 return IntPtr.Zero;
             }
 
+            // 2.1 任务栏重建自愈（Explorer 重启后恢复托盘图标）
+            if (msg == NativeMethods.WM_TASKBARCREATED)
+            {
+                _tray?.EnsureVisible();
+            }
+
             // 3. 限制窗口拖动在当前屏幕工作区内
             if (msg == WM_MOVING)
             {
-                // 获取当前鼠标所在的屏幕工作区（物理像素）
-                POINT mousePos;
-                GetCursorPos(out mousePos);
-                var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(mousePos.X, mousePos.Y));
-                var area = screen.WorkingArea;
-
                 var rect = (RECT)Marshal.PtrToStructure(lParam, typeof(RECT))!;
                 int width = rect.Right - rect.Left;
                 int height = rect.Bottom - rect.Top;
 
+                // 按窗口中心点探测所在的屏幕工作区（物理像素）
+                var centerPoint = new System.Drawing.Point(rect.Left + width / 2, rect.Top + height / 2);
+                var screen = System.Windows.Forms.Screen.FromPoint(centerPoint);
+                var area = screen.WorkingArea;
+
+                // 尺寸若超出工作区，先按工作区收窄
+                if (width > area.Width)
+                {
+                    width = area.Width;
+                }
+                if (height > area.Height)
+                {
+                    height = area.Height;
+                }
+
+                // 左右独立双向钳制
                 if (rect.Left < area.Left)
                 {
                     rect.Left = area.Left;
                     rect.Right = rect.Left + width;
                 }
-                else if (rect.Right > area.Right)
+                if (rect.Right > area.Right)
                 {
                     rect.Right = area.Right;
                     rect.Left = rect.Right - width;
                 }
 
+                // 上下独立双向钳制
                 if (rect.Top < area.Top)
                 {
                     rect.Top = area.Top;
                     rect.Bottom = rect.Top + height;
                 }
-                else if (rect.Bottom > area.Bottom)
+                if (rect.Bottom > area.Bottom)
                 {
                     rect.Bottom = area.Bottom;
                     rect.Top = rect.Bottom - height;
@@ -455,19 +461,24 @@ namespace WinKit.Todo
             TogglePinState();
         }
 
-        private void TogglePinState()
+        public void SetPinned(bool pinned)
         {
-            _isPinned    = !_isPinned;
+            _isPinned = pinned;
             this.Topmost = _isPinned;
             UpdatePinButton();
 
-            // 若取消置顶，且当前正处于穿透模式，则必须同步关闭穿透模式，避免非置顶穿透被下层窗口遮挡
+            // 若取消置顶，且当前正处于穿透模式，则必须强制联动退出穿透模式，严禁出现“非置顶 + 鼠标穿透”悬挂态
             if (!_isPinned && _isPassThrough)
             {
                 ApplyPassThroughState(false);
                 _tray?.SyncPassThroughMenuItem();
             }
+            _tray?.SyncPinMenuItem();
+        }
 
+        private void TogglePinState()
+        {
+            SetPinned(!_isPinned);
             SaveSettings();
         }
 
@@ -750,6 +761,75 @@ namespace WinKit.Todo
             SafeHide();
         }
 
+        /// <summary>
+        /// 快速唤出 / 隐藏待办清单窗口（供托盘双击与快捷键统一调用）：
+        /// 1. 若当前在视野中无遮挡（在顶层激活，或桌面无其他窗口遮挡待办） -> 直接收起隐藏；
+        /// 2. 若当前被隐藏或被其他应用窗口遮挡 -> 穿透前台锁，瞬间跃居屏幕最前方并获得焦点。
+        /// </summary>
+        public void ToggleVisibility()
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            bool isUncovered = false;
+
+            if (IsVisible && hwnd != IntPtr.Zero)
+            {
+                // 获取当前待办窗口区域的物理中心点（兼容高 DPI 缩放）
+                var source = PresentationSource.FromVisual(this);
+                double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+
+                int centerX = (int)((Left + Width / 2) * dpiX);
+                int centerY = (int)((Top + Height / 2) * dpiY);
+
+                // 探测物理屏幕上覆盖在此坐标最上层的顶层窗口
+                IntPtr hitWnd = NativeMethods.WindowFromPoint(new NativeMethods.POINT { X = centerX, Y = centerY });
+                IntPtr hitRoot = hitWnd != IntPtr.Zero ? NativeMethods.GetAncestor(hitWnd, NativeMethods.GA_ROOT) : IntPtr.Zero;
+
+                // 判断是否裸露未被遮挡：
+                // A. 探测到的顶层窗口就是待办清单本身；
+                // B. 或当前前台活动窗口正是待办清单（容错）
+                isUncovered = (hitRoot == hwnd || NativeMethods.GetForegroundWindow() == hwnd);
+            }
+
+            if (isUncovered)
+            {
+                // 已经在视野中无遮挡，按下快捷键/双击图标执行一键收起隐藏
+                HideInlineInputAndWindow();
+            }
+            else
+            {
+                // 被隐藏或被外部窗口遮挡，瞬间跃居最前
+                if (!IsVisible)
+                {
+                    Show();
+                }
+                if (WindowState == WindowState.Minimized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+
+                if (hwnd != IntPtr.Zero)
+                {
+                    // 刷新 Z-Order，确保无论当前置顶与否均跃居于屏幕最前方
+                    if (_isPinned)
+                    {
+                        SetWindowPos(hwnd, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040); // HWND_TOPMOST
+                    }
+                    else
+                    {
+                        // 经典双阶段 Z 序提升：先 TOPMOST 再 NOTOPMOST，突破 Windows Z-Order 下沉粘滞
+                        SetWindowPos(hwnd, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
+                        SetWindowPos(hwnd, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
+                    }
+
+                    // 穿透 Windows 前台锁限制，强制切到前台活动状态
+                    NativeMethods.ForceSetForegroundWindow(hwnd);
+                }
+
+                Activate();
+            }
+        }
+
         private void UpdateEmptyPlaceholder()
         {
             EmptyPlaceholder.Visibility =
@@ -783,8 +863,10 @@ namespace WinKit.Todo
         public void RestoreTodoItem(TodoItem restoredItem)
         {
             if (restoredItem == null || string.IsNullOrWhiteSpace(restoredItem.Title)) return;
+            if (_items.Any(x => x.Id == restoredItem.Id)) return;
             _items.Add(restoredItem);
             _todoService.SaveTodos(_items);
+            _todoService.Flush();
             if (_items.Count > 0)
                 TodoList.ScrollIntoView(_items[^1]);
         }
@@ -802,6 +884,7 @@ namespace WinKit.Todo
             _recycleBinService.AddToRecycleBin(item);
             _items.Remove(item);
             _todoService.SaveTodos(_items);
+            _todoService.Flush();
 
             _historyWindow?.Dispatcher.Invoke(() =>
             {
@@ -1179,6 +1262,7 @@ namespace WinKit.Todo
                 if (container != null)
                 {
                     WinPanel.SetZIndex(container, 0);
+                    container.BeginAnimation(UIElement.OpacityProperty, null);
                     container.Opacity = 1.0;
                     if (container.RenderTransform is TranslateTransform trans && !trans.IsFrozen)
                     {
@@ -1232,7 +1316,15 @@ namespace WinKit.Todo
         {
             var container = TodoList.ItemContainerGenerator.ContainerFromItem(item) as System.Windows.Controls.ListViewItem;
             if (container == null) return;
-            var fade = new DoubleAnimation(0.5, 1.0, new Duration(TimeSpan.FromMilliseconds(200)));
+            var fade = new DoubleAnimation(0.5, 1.0, new Duration(TimeSpan.FromMilliseconds(200)))
+            {
+                FillBehavior = FillBehavior.Stop
+            };
+            fade.Completed += (s, e) =>
+            {
+                container.BeginAnimation(UIElement.OpacityProperty, null);
+                container.Opacity = 1.0;
+            };
             container.BeginAnimation(UIElement.OpacityProperty, fade);
         }
 
@@ -1273,19 +1365,13 @@ namespace WinKit.Todo
 
             if (_isPinned)
             {
-                // 当前处于置顶状态 -> 取消置顶
-                _isPinned = false;
-                this.Topmost = false;
-                UpdatePinButton();
+                // 当前处于置顶状态 -> 取消置顶（自动联动强制退出穿透）
+                SetPinned(false);
             }
             else
             {
                 // 当前处于非置顶状态 -> 置顶 + 取消穿透
-                _isPinned = true;
-                this.Topmost = true;
-                UpdatePinButton();
-
-                // 取消穿透（若处于穿透状态）
+                SetPinned(true);
                 if (_isPassThrough)
                 {
                     ApplyPassThroughState(false);
@@ -1349,15 +1435,24 @@ namespace WinKit.Todo
                     return false;
                 }
 
-                // 2. 真实活动屏幕探测（针对多显示器异形布局盲区）
-                var probePoint = new System.Drawing.Point((int)left + 30, (int)top + 20);
+                // 2. 真实活动屏幕探测：先将 WPF DIP 换算为物理像素（针对多显示器不同 DPI 缩放及异形布局）
+                var dpi = VisualTreeHelper.GetDpi(this);
+                double scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+                double scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+
+                int physicalLeft = (int)(left * scaleX);
+                int physicalTop = (int)(top * scaleY);
+                int physicalWidth = (int)(width * scaleX);
+                int physicalHeight = (int)(height * scaleY);
+
+                var probePoint = new System.Drawing.Point(physicalLeft + (int)(30 * scaleX), physicalTop + (int)(20 * scaleY));
                 var screen = System.Windows.Forms.Screen.FromPoint(probePoint);
                 if (screen != null && screen.Bounds.Contains(probePoint))
                 {
                     return true;
                 }
 
-                var centerPoint = new System.Drawing.Point((int)(left + width / 2), (int)(top + height / 2));
+                var centerPoint = new System.Drawing.Point(physicalLeft + physicalWidth / 2, physicalTop + physicalHeight / 2);
                 var centerScreen = System.Windows.Forms.Screen.FromPoint(centerPoint);
                 if (centerScreen != null && centerScreen.Bounds.Contains(centerPoint))
                 {
@@ -1366,7 +1461,7 @@ namespace WinKit.Todo
             }
             catch
             {
-                return true;
+                return false;
             }
 
             return false;

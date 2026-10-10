@@ -247,8 +247,27 @@ namespace WinKit.Clipboard.Services
 
         public KeyboardHookService()
         {
-            _proc   = HookCallback;
-            _hookID = SetHook(_proc);
+            _proc = HookCallback;
+            InstallHook();
+        }
+
+        private void InstallHook()
+        {
+            if (_hookID != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hookID);
+                _hookID = IntPtr.Zero;
+            }
+
+            if (_proc != null)
+            {
+                _hookID = SetHook(_proc);
+                if (_hookID == IntPtr.Zero)
+                {
+                    System.Threading.Thread.Sleep(50);
+                    _hookID = SetHook(_proc);
+                }
+            }
         }
 
         // ── 已有构造函数重载，保持向后兼容 ─────────────────────────────
@@ -595,7 +614,14 @@ namespace WinKit.Clipboard.Services
             using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
             using var curModule  = curProcess.MainModule;
             if (curModule?.ModuleName != null)
+            {
                 _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+                if (_hookID == IntPtr.Zero)
+                {
+                    System.Threading.Thread.Sleep(30);
+                    _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+                }
+            }
         }
 
         public void Stop()

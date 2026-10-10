@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WinKit</AssemblyName>
     <RootNamespace>WinKit</RootNamespace>
-    <Version>2.8.3</Version>
+    <Version>2.9</Version>
     <Authors>li5bo5</Authors>
     <Company>li5bo5</Company>
     <Product>WinKit</Product>
@@ -17,10 +17,9 @@
     <FileDescription>一款开源工具</FileDescription>
     <ApplicationIcon>PTD.ico</ApplicationIcon>
     
-    <!-- 优化构建与输出：直接输出至 Release 目录，避免生成 bin 文件夹 -->
-    <OutputPath>Release\</OutputPath>
+    <!-- 优化发布选项 -->
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
-    <PublishSingleFile>false</PublishSingleFile>
+    <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <DebugType>embedded</DebugType>
     <DebugSymbols>false</DebugSymbols>

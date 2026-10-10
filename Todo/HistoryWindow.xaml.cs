@@ -37,8 +37,6 @@ namespace WinKit.Todo
             Loaded += (s, e) => ReloadRecycleBin();
         }
 
-        public void ReloadHistory() => ReloadRecycleBin();
-
         public void ReloadRecycleBin()
         {
             _items.Clear();

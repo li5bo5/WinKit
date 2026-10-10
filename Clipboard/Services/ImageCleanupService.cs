@@ -19,6 +19,7 @@ namespace WinKit.Clipboard.Services
         private readonly Func<IList<ClipboardItem>> _getItemsFunc;
         private readonly Action<List<ClipboardItem>> _removeItemsAction;
         private readonly System.Threading.Timer? _periodicTimer;
+        private readonly CancellationTokenSource _cts = new();
         private int _isCleaning = 0;
 
         public ImageCleanupService(
@@ -31,11 +32,16 @@ namespace WinKit.Clipboard.Services
             _removeItemsAction = removeItemsAction;
 
             // 1. 触发时机 1：应用启动 10 秒后执行初次清理
-            Task.Delay(TimeSpan.FromSeconds(10)).ContinueWith(_ => RunCleanupAsync());
+            Task.Delay(TimeSpan.FromSeconds(10), _cts.Token).ContinueWith(_ =>
+            {
+                if (!_cts.IsCancellationRequested) RunCleanupAsync();
+            }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
             // 2. 触发时机 2：每 12 小时定时轮询触发
-            _periodicTimer = new System.Threading.Timer(_ => RunCleanupAsync(), null,
-                TimeSpan.FromHours(12), TimeSpan.FromHours(12));
+            _periodicTimer = new System.Threading.Timer(_ =>
+            {
+                if (!_cts.IsCancellationRequested) RunCleanupAsync();
+            }, null, TimeSpan.FromHours(12), TimeSpan.FromHours(12));
         }
 
         /// <summary>
@@ -73,12 +79,15 @@ namespace WinKit.Clipboard.Services
                     var expireThreshold = DateTimeOffset.Now.AddDays(-retentionDays);
                     foreach (var item in imageItems)
                     {
+                        if (_cts.IsCancellationRequested) return;
                         if (item.CreatedAt < expireThreshold)
                         {
                             itemsToRemove.Add(item);
                             ImageProcessingService.SafeDeleteFiles(item);
                         }
                     }
+
+                    if (_cts.IsCancellationRequested) return;
 
                     // 从待检查列表中移除已清理项
                     var remainingImages = imageItems.Except(itemsToRemove).OrderBy(i => i.CreatedAt).ToList();
@@ -92,16 +101,21 @@ namespace WinKit.Clipboard.Services
 
                         foreach (var item in toEvict)
                         {
+                            if (_cts.IsCancellationRequested) return;
                             itemsToRemove.Add(item);
                             ImageProcessingService.SafeDeleteFiles(item);
                         }
                     }
+
+                    if (_cts.IsCancellationRequested) return;
 
                     // ── 阶段 3：通知 UI/存储移除已清理条目 ──────────────────────
                     if (itemsToRemove.Count > 0)
                     {
                         _removeItemsAction(itemsToRemove);
                     }
+
+                    if (_cts.IsCancellationRequested) return;
 
                     // ── 阶段 4：孤立文件深度清理 ──────────────────────────────
                     CleanupOrphanFiles(allItems);
@@ -120,7 +134,7 @@ namespace WinKit.Clipboard.Services
         /// <summary>
         /// 扫描磁盘目录，删除未被任何剪贴板项引用的孤立图片与缩略图
         /// </summary>
-        private static void CleanupOrphanFiles(IList<ClipboardItem> allItems)
+        private void CleanupOrphanFiles(IList<ClipboardItem> allItems)
         {
             try
             {
@@ -142,13 +156,14 @@ namespace WinKit.Clipboard.Services
             }
         }
 
-        private static void CleanDirectoryOrphans(string dirPath, HashSet<string> referencedFiles)
+        private void CleanDirectoryOrphans(string dirPath, HashSet<string> referencedFiles)
         {
             if (!Directory.Exists(dirPath)) return;
 
             var files = Directory.GetFiles(dirPath, "*.png");
             foreach (var file in files)
             {
+                if (_cts.IsCancellationRequested) return;
                 string fullPath = Path.GetFullPath(file);
                 if (!referencedFiles.Contains(fullPath))
                 {
@@ -167,7 +182,13 @@ namespace WinKit.Clipboard.Services
 
         public void Dispose()
         {
+            try
+            {
+                _cts.Cancel();
+            }
+            catch { }
             _periodicTimer?.Dispose();
+            _cts.Dispose();
         }
     }
 }

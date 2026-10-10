@@ -66,6 +66,9 @@ namespace WinKit.Clipboard.Services
             }
         }
 
+        /// <summary>剪贴板最大允许置顶的条目数（固定为 5 条）</summary>
+        public const int MaxPinnedItems = 5;
+
         /// <summary>
         /// 切换条目的置顶锁定状态；若超过最大置顶上限则返回 false
         /// </summary>
@@ -75,12 +78,8 @@ namespace WinKit.Clipboard.Services
 
             if (!item.IsPinned)
             {
-                int maxPinned = _settingsManager.Settings.ClipboardMaxPinnedItems;
-                if (maxPinned < 1) maxPinned = 1;
-                if (maxPinned > 20) maxPinned = 20;
-
                 int currentPinned = _items.Count(i => i.IsPinned);
-                if (currentPinned >= maxPinned)
+                if (currentPinned >= MaxPinnedItems)
                 {
                     return false;
                 }
