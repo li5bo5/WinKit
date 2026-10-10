@@ -1,5 +1,9 @@
 # WinKit - 极致精美的现代 Windows 效率工具箱 🚀
 
+[![Release](https://img.shields.io/github/v/release/li5bo5/WinKit?style=flat-square&color=0078D4)](https://github.com/li5bo5/WinKit/releases)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-orange?style=flat-square)](LICENSE)
+[![LINUX DO](https://img.shields.io/badge/LINUX%20DO-社区认可-20242A?style=flat-square&logo=linux&logoColor=white)](https://linux.do)
+
 `WinKit` 是一款专为 Windows 设计的、极致轻量且美观的效率工具箱。它将 **TodoList (待办工具)**、**Clipboard (高级剪贴板)** 与 **Quick Phrases (常用短语)** 深度整合，采用高档磨砂半透明（毛玻璃）视觉体系，并自研了 100% 贴合 Windows 11 Fluent 风格的系统托盘右键菜单。
 
 ---
@@ -137,6 +141,13 @@ dotnet publish WinKit.csproj -c Release -r win-x64 --self-contained true -o Publ
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=li5bo5/WinKit&type=date&legend=top-left&sealed_token=QByHdIhs51DixtP469uzjKFznxRO-qV_XhxKR7kkNTtP7ZHYk_JpfQAjkDARmwEGZb1M_d1sGLvXswrsBwyCzJ02PGI-ds1ui20xR5rwEboA9oGnLlrXhx81b5Kkxul94oO-eouIdytDTDH5JZh7uXJX5EEFnuAw9J5FCwGb7zYVsyw_i-65UYXJKNor" />
  </picture>
 </a>
+
+---
+
+## 🌐 社区认可与支持
+
+本项目已在 **[LINUX DO](https://linux.do)** 极客社区进行开源分享与技术交流，感谢社区佬友们的宝贵建议与支持！  
+👉 **社区讨论与反馈**：[LINUX DO 社区](https://linux.do)
 
 ---
 
