@@ -177,6 +177,14 @@ namespace WinKit.Clipboard.Services
                                             ItemDetected?.Invoke(this, processedItem);
                                         }));
                                     }
+                                    else
+                                    {
+                                        // 图片因超过上限 (5MB) 或编码失败被丢弃，回退到 STA UI 线程捕获文本内容
+                                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                                        {
+                                            TryCaptureText(currentSeq);
+                                        }));
+                                    }
                                 }
                             }
                             catch (Exception ex)
@@ -189,46 +197,51 @@ namespace WinKit.Clipboard.Services
                 }
 
                 // 3. 检查文本内容
-                if (System.Windows.Forms.Clipboard.ContainsText())
-                {
-                    string text = string.Empty;
-                    try
-                    {
-                        text = System.Windows.Forms.Clipboard.GetText();
-                    }
-                    catch { }
-
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        string normalizedText = text.Replace("\r\n", "\n").Trim();
-                        // 检查是否为即将发生的自回填文本（兼顾原始文本与换行归一化比对）
-                        if (_upcomingSelfPastes.ContainsKey(text) ||
-                            _upcomingSelfPastes.ContainsKey(normalizedText) ||
-                            text == _lastTextContent ||
-                            normalizedText == _lastTextContent?.Replace("\r\n", "\n").Trim())
-                        {
-                            _lastHandledSequence = currentSeq;
-                            return;
-                        }
-
-                        _lastTextContent = text;
-                        _lastHandledSequence = currentSeq;
-
-                        var textItem = new ClipboardItem
-                        {
-                            Id = Guid.NewGuid(),
-                            Type = ClipboardItemType.Text,
-                            ContentType = "Text",
-                            Content = text,
-                            CreatedAt = DateTimeOffset.Now
-                        };
-                        ItemDetected?.Invoke(this, textItem);
-                    }
-                }
+                TryCaptureText(currentSeq);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"ClipboardService: 监控检查异常 ({ex.Message})");
+            }
+        }
+
+        private void TryCaptureText(uint currentSeq)
+        {
+            if (System.Windows.Forms.Clipboard.ContainsText())
+            {
+                string text = string.Empty;
+                try
+                {
+                    text = System.Windows.Forms.Clipboard.GetText();
+                }
+                catch { }
+
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    string normalizedText = text.Replace("\r\n", "\n").Trim();
+                    // 检查是否为即将发生的自回填文本（兼顾原始文本与换行归一化比对）
+                    if (_upcomingSelfPastes.ContainsKey(text) ||
+                        _upcomingSelfPastes.ContainsKey(normalizedText) ||
+                        text == _lastTextContent ||
+                        normalizedText == _lastTextContent?.Replace("\r\n", "\n").Trim())
+                    {
+                        _lastHandledSequence = currentSeq;
+                        return;
+                    }
+
+                    _lastTextContent = text;
+                    _lastHandledSequence = currentSeq;
+
+                    var textItem = new ClipboardItem
+                    {
+                        Id = Guid.NewGuid(),
+                        Type = ClipboardItemType.Text,
+                        ContentType = "Text",
+                        Content = text,
+                        CreatedAt = DateTimeOffset.Now
+                    };
+                    ItemDetected?.Invoke(this, textItem);
+                }
             }
         }
 

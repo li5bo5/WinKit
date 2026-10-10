@@ -93,6 +93,11 @@ namespace WinKit.Todo
                 using var module = process.MainModule;
                 IntPtr hMod = module != null ? GetModuleHandle(module.ModuleName) : IntPtr.Zero;
                 _mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookProc, hMod, 0);
+                if (_mouseHookHandle == IntPtr.Zero && hMod != IntPtr.Zero)
+                {
+                    System.Threading.Thread.Sleep(20);
+                    _mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookProc, hMod, 0);
+                }
             }
             catch
             {
@@ -193,6 +198,14 @@ namespace WinKit.Todo
             {
                 CommitAndClose();
                 e.Handled = true;
+            }
+            // Ctrl+X：剪切后异步刷新 UI 避免文本残留
+            else if (e.Key == WinInput.Key.X && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    InputBox.InvalidateVisual();
+                }), System.Windows.Threading.DispatcherPriority.Input);
             }
             // Esc：取消关闭
             else if (e.Key == WinInput.Key.Escape)

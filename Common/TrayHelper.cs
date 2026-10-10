@@ -33,6 +33,7 @@ namespace WinKit.Common
     public class TrayHelper : IDisposable
     {
         private readonly SWF.NotifyIcon _icon;
+        private readonly Icon _trayIcon;
         private readonly Window _todoWindow;
         private readonly Window _pasteWindow;
         private readonly WpfApp _app;
@@ -73,19 +74,12 @@ namespace WinKit.Common
             _todoWindow = todoWindow;
             _pasteWindow = pasteWindow;
 
-            // ── 1. 预创建弹窗实例并在后台待命 ──────────────────────────
+            // ── 1. 预创建弹窗实例（静默待命，避免启动期伪显示/隐藏扰动窗口树）─────────
             _menuHostWindow = new MenuHostWindow();
-            _menuHostWindow.Show();
-            _menuHostWindow.Hide();
-
             _aboutWindow = new AboutWindow();
-            _aboutWindow.Show();
-            _aboutWindow.Hide();
 
             _historyWindow = new Todo.HistoryWindow((Todo.MainWindow)_todoWindow, _settingsManager);
             ((Todo.MainWindow)_todoWindow).SetHistoryWindow(_historyWindow);
-            _historyWindow.Show();
-            _historyWindow.Hide();
 
             _preferencesWindow = new HotkeySettingsWindow(_settingsManager);
             _preferencesWindow.IsVisibleChanged += (s, e) =>
@@ -107,8 +101,6 @@ namespace WinKit.Common
                     todoWin.Activate();
                 }
             };
-            _preferencesWindow.Show();
-            _preferencesWindow.Hide();
 
             // ── 2. 创建极简 4 项 WPF ContextMenu ──────────────────────
             _contextMenu = new ContextMenu();
@@ -143,29 +135,31 @@ namespace WinKit.Common
                 _menuHostWindow.Hide();
             };
 
-            // ── 4. 创建系统托盘 NotifyIcon ────────────────────────────
+            // ── 4. 创建系统托盘 NotifyIcon（强引用驻留，避免过早 GC）──────
             var asm = Assembly.GetExecutingAssembly();
-            var iconStream = asm.GetManifestResourceStream("WinKit.PTD.ico");
             int smallWidth = (int)SystemParameters.SmallIconWidth;
             int smallHeight = (int)SystemParameters.SmallIconHeight;
+            if (smallWidth <= 0) smallWidth = 16;
+            if (smallHeight <= 0) smallHeight = 16;
 
-            Icon trayIcon;
-            if (iconStream != null)
+            using (var iconStream = asm.GetManifestResourceStream("WinKit.PTD.ico"))
             {
-                using var rawIcon = new Icon(iconStream);
-                trayIcon = new Icon(rawIcon, new System.Drawing.Size(smallWidth, smallHeight));
-            }
-            else
-            {
-                trayIcon = SystemIcons.Application;
+                if (iconStream != null)
+                {
+                    _trayIcon = new Icon(iconStream, new System.Drawing.Size(smallWidth, smallHeight));
+                }
+                else
+                {
+                    _trayIcon = SystemIcons.Application;
+                }
             }
 
             var ver = asm.GetName().Version;
-            var version = ver != null ? (ver.Build > 0 ? ver.ToString(3) : $"{ver.Major}.{ver.Minor}") : "2.7.1";
+            var version = ver != null ? (ver.Build > 0 ? ver.ToString(3) : $"{ver.Major}.{ver.Minor}") : "未知";
 
             _icon = new SWF.NotifyIcon
             {
-                Icon = trayIcon,
+                Icon = _trayIcon,
                 Text = $"WinKit v{version}",
                 Visible = true
             };
@@ -207,14 +201,7 @@ namespace WinKit.Common
                     _todoWindow.Dispatcher.Invoke(() =>
                     {
                         var todoWin = (Todo.MainWindow)_todoWindow;
-                        if (todoWin.IsVisible)
-                        {
-                            todoWin.HideInlineInputAndWindow();
-                        }
-                        else
-                        {
-                            todoWin.ToggleTopmostAndPassThrough();
-                        }
+                        todoWin.ToggleVisibility();
                     });
                 }
             };
@@ -298,9 +285,61 @@ namespace WinKit.Common
             _app.Shutdown();
         }
 
+        /// <summary>
+        /// 确保系统托盘图标处于可见激活状态（在主消息泵空闲或 Explorer 重启自愈时调用）
+        /// </summary>
+        public void EnsureVisible()
+        {
+            try
+            {
+                if (_icon != null)
+                {
+                    // 幂等设置即可，切勿做 Visible 翻转（false → true）。
+                    // 翻转会先发 NIM_DELETE 撤掉图标，若随后的 NIM_ADD 失败
+                    // （Shell 尚未就绪等），Windows 将彻底丢失这个托盘图标，
+                    // 连 NotifyIconSettings 记录都不会留下，且失败时不抛异常、无法感知。
+                    _icon.Visible = true;
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 带延迟重试的托盘注册兜底。
+        /// Shell_NotifyIcon 失败时只返回 FALSE、绝不抛异常，因此只能靠重发 NIM_ADD 兜底。
+        /// </summary>
+        public void EnsureVisibleWithRetry(int times = 4, int delayMs = 1200)
+        {
+            EnsureVisible();
+            if (times <= 1) return;
+
+            var t = new System.Threading.Thread(() =>
+            {
+                for (int i = 1; i < times; i++)
+                {
+                    System.Threading.Thread.Sleep(delayMs);
+                    try
+                    {
+                        _todoWindow.Dispatcher.BeginInvoke(new Action(EnsureVisible));
+                    }
+                    catch { }
+                }
+            });
+            t.IsBackground = true;
+            t.Name = "TrayIconRetry";
+            t.Start();
+        }
+
         public void Dispose()
         {
-            _icon.Dispose();
+            try
+            {
+                _icon.Visible = false;
+                _icon.Dispose();
+            }
+            catch { }
+
+            _trayIcon?.Dispose();
             _aboutWindow.Dispatcher.Invoke(() => _aboutWindow.Close());
             _historyWindow.Dispatcher.Invoke(() => _historyWindow.Close());
             _preferencesWindow.Dispatcher.Invoke(() => _preferencesWindow.Close());

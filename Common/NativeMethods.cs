@@ -21,6 +21,7 @@ namespace WinKit.Common
         public const uint SWP_NOMOVE = 0x0002;
         public const uint SWP_NOACTIVATE = 0x0010;
         public const uint SWP_SHOWWINDOW = 0x0040;
+        public const uint GA_ROOT = 2;
 
         public const int WH_KEYBOARD_LL = 13;
         public const int WH_MOUSE_LL = 14;
@@ -136,6 +137,12 @@ namespace WinKit.Common
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr WindowFromPoint(POINT Point);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -482,6 +489,16 @@ namespace WinKit.Common
         }
 
         /// <summary>
+        /// 检查指定窗口句柄是否属于本进程自身窗口
+        /// </summary>
+        public static bool IsOwnWindow(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+            GetWindowThreadProcessId(hWnd, out uint processId);
+            return processId == (uint)Environment.ProcessId;
+        }
+
+        /// <summary>
         /// 高兼容性模拟 Ctrl+V 粘贴动作（含微延迟与修饰键释放保护）
         /// </summary>
         public static void SimulateCtrlV()
@@ -494,9 +511,12 @@ namespace WinKit.Common
         /// </summary>
         public static void SimulateCtrlVDirect()
         {
-            // 确保物理 Win 键释放，防止误触发系统开始菜单
-            keybd_event((byte)VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            keybd_event((byte)VK_RWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            // 确保物理修饰键全部释放，防止带 Shift/Alt/Win 触发组合粘贴或开始菜单
+            keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_RWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_ALT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_CTRL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
 
             int inputSize = Marshal.SizeOf(typeof(INPUT));
             var inputs = new INPUT[]
@@ -645,6 +665,7 @@ namespace WinKit.Common
 
         public const int HWND_BROADCAST = 0xFFFF;
         public static readonly int WM_SHOW_EXISTING_INSTANCE = RegisterWindowMessage("WinKit_ActivateExistingInstance_li5bo5");
+        public static readonly int WM_TASKBARCREATED = RegisterWindowMessage("TaskbarCreated");
 
         public static void BringExistingInstanceToFront()
         {

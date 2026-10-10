@@ -34,8 +34,11 @@ namespace WinKit.Common
 
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            // 点击屏幕其他位置（窗口失焦）时关闭弹窗
-            Close();
+            // 注意：此处切勿调用 Close()。
+            // 调用方为 alreadyRunningDialog.ShowDialog() 后紧跟 Shutdown()，
+            // 一旦本窗口因失焦而自行关闭，第二个实例会立刻退出进程，
+            // 表现为「双击后毫无反应 / 托盘图标不出现」的假象。
+            // 如需失焦自动关闭，应改为由调用方显式决定是否退出，而非这里直接 Close。
         }
     }
 }

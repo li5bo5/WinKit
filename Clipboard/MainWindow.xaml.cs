@@ -241,7 +241,7 @@ namespace WinKit.Clipboard
 
         private void OnClickedOutsideWindow()
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(() =>
             {
                 if (!_isPinned && IsVisible) Hide();
             });
@@ -284,12 +284,15 @@ namespace WinKit.Clipboard
             }
         }
 
+        private bool _isPasting = false;
+
         /// <summary>
         /// 回填选中的文本或图片到前台窗口（未固定时隐藏，固定时保持置顶连续粘贴）
         /// </summary>
         private async void UseSelectedItem(ClipboardItem item)
         {
-            if (item == null) return;
+            if (item == null || _isPasting) return;
+            _isPasting = true;
 
             try
             {
@@ -354,8 +357,11 @@ namespace WinKit.Clipboard
                     await Task.Delay(30);
                 }
 
-                // 4. 模拟 Ctrl+V 粘贴
-                NativeMethods.SimulateCtrlV();
+                // 4. 模拟 Ctrl+V 粘贴（确保前台不是本进程窗口，防止误贴进自身）
+                if (!NativeMethods.IsOwnWindow(GetForegroundWindow()))
+                {
+                    NativeMethods.SimulateCtrlV();
+                }
             }
             catch (Exception ex)
             {
@@ -364,6 +370,7 @@ namespace WinKit.Clipboard
             finally
             {
                 _clipboardService.EndInternalPaste();
+                _isPasting = false;
             }
         }
 
@@ -462,8 +469,7 @@ namespace WinKit.Clipboard
                 bool success = _clipboardManager.TogglePin(item);
                 if (!success)
                 {
-                    int maxPinned = _settingsManager.Settings.ClipboardMaxPinnedItems;
-                    System.Windows.MessageBox.Show(this, $"最多只能置顶 {maxPinned} 个条目", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    System.Windows.MessageBox.Show(this, $"最多只能置顶 {Clipboard.Services.ClipboardManager.MaxPinnedItems} 个条目", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 e.Handled = true;
             }

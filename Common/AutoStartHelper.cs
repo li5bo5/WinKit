@@ -50,13 +50,47 @@ namespace WinKit.Common
                 using var key = Registry.CurrentUser.OpenSubKey(RegistryKey, false);
                 if (key == null) return false;
 
-                var value = key.GetValue(AppName);
-                return value != null;
+                var value = key.GetValue(AppName) as string;
+                if (string.IsNullOrWhiteSpace(value)) return false;
+
+                string currentExe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(currentExe)) return false;
+
+                string registeredPath = value.Trim().Trim('"');
+                return string.Equals(registeredPath, currentExe, StringComparison.OrdinalIgnoreCase);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"AutoStartHelper: 注册表读取失败 - {ex.Message}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// 检查并校准自启路径（如果已开启自启但路径与当前 EXE 不一致，则自动更新）
+        /// </summary>
+        public static void CheckAndSyncPath()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(RegistryKey, true);
+                if (key == null) return;
+
+                var value = key.GetValue(AppName) as string;
+                if (string.IsNullOrWhiteSpace(value)) return;
+
+                string currentExe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(currentExe)) return;
+
+                string registeredPath = value.Trim().Trim('"');
+                if (!string.Equals(registeredPath, currentExe, StringComparison.OrdinalIgnoreCase))
+                {
+                    key.SetValue(AppName, $"\"{currentExe}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"AutoStartHelper: 校准自启路径失败 - {ex.Message}");
             }
         }
     }

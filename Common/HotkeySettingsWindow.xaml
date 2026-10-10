@@ -63,7 +63,7 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="置顶显示快捷键" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                    <TextBlock Text="唤出/隐藏待办清单快捷键" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
                                     <TextBlock Text="默认：Ctrl + D" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBox x:Name="HkTodoTop" Grid.Column="1"
@@ -76,27 +76,6 @@
                                          Cursor="Hand"/>
                             </Grid>
 
-                            <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
-
-                            <!-- 保存并退出编辑快捷键 -->
-                            <Grid Margin="0,3">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="保存退出编辑快捷键" FontSize="12" Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
-                                    <TextBlock Text="默认：Ctrl + S" FontSize="10" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
-                                </StackPanel>
-                                <TextBox x:Name="HkSaveExit" Grid.Column="1"
-                                         Style="{StaticResource HotkeyInputBox}"
-                                         IsReadOnly="True"
-                                         GotFocus="HotkeyBox_GotFocus"
-                                         LostFocus="HotkeyBox_LostFocus"
-                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown"
-                                         Tag="HotkeyTodoSaveAndExit"
-                                         Cursor="Hand"/>
-                            </Grid>
 
                             <Separator Margin="0,6" Background="{DynamicResource ThemeSeparatorBrush}"/>
 

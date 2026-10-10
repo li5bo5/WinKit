@@ -65,6 +65,7 @@ namespace WinKit
             // 1. 初始化统一配置管理器与全局主题引擎
             _settingsManager = new SettingsManager();
             ThemeManager.Initialize(_settingsManager);
+            Common.AutoStartHelper.CheckAndSyncPath();
 
             // 2. 初始化常用短语与剪贴板数据中心
             _quickPhraseManager = new QuickPhraseManager();
@@ -109,6 +110,12 @@ namespace WinKit
             // 9. 默认展现 TodoList 待办主窗口
             _todoWindow.Show();
             _todoWindow.Activate();
+
+            // 10. 在主消息泵正式进入空闲态后，二次确保托盘图标 100% 稳定显现
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+            {
+                _trayHelper?.EnsureVisibleWithRetry();
+            });
         }
 
         private void OnClipboardItemDetected(object? sender, ClipboardItem item)
@@ -132,23 +139,6 @@ namespace WinKit
                     _quickPhraseWindow.ShowNearCaretOrMouse(targetHwnd);
                 }
             });
-        }
-
-        // ══════════════════════════════════════════════
-        // 剪贴板功能开关（由托盘"启用"菜单项调用）
-        // ══════════════════════════════════════════════
-        public void ToggleClipboardFeature(bool enable)
-        {
-            if (enable)
-            {
-                _clipboardService?.StartMonitoring();
-            }
-            else
-            {
-                _clipboardService?.StopMonitoring();
-                _pasteWindow?.Hide();
-            }
-            RegisterAllHotkeys();
         }
 
         // ══════════════════════════════════════════════
@@ -180,10 +170,16 @@ namespace WinKit
                 return false; // 放行 Esc 给前台活动窗口
             });
 
-            // ── 1. 置顶显示快捷键（无条件常驻）───────────────────────
+            // ── 1. 唤出 / 隐藏待办清单（无条件常驻）─────────────────────
             _keyboardHookService.RegisterHotkey(settings.HotkeyTodoTopToggle, () =>
             {
-                Dispatcher.BeginInvoke(() => _todoWindow?.ToggleTopmostAndPassThrough());
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (_todoWindow is Todo.MainWindow todoWin)
+                    {
+                        todoWin.ToggleVisibility();
+                    }
+                });
             });
 
             // ── 2. 唤出 / 隐藏剪贴板（受剪贴板监控总开关控制）────────

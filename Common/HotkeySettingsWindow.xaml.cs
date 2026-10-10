@@ -55,7 +55,6 @@ namespace WinKit.Common
 
                 // 1. TodoList
                 HkTodoTop.Text = s.HotkeyTodoTopToggle;
-                HkSaveExit.Text = s.HotkeyTodoSaveAndExit;
                 ChkTodoExpandedDisplay.IsChecked = s.TodoExpandedDisplay;
                 ChkTodoPassThrough.IsChecked = s.TodoIsPassThrough;
                 ChkTrayDoubleClick.IsChecked = s.TrayDoubleClickTodoEnabled;
@@ -272,7 +271,6 @@ namespace WinKit.Common
 
             // 1. TodoList
             settings.HotkeyTodoTopToggle        = HkTodoTop.Text.Trim();
-            settings.HotkeyTodoSaveAndExit      = HkSaveExit.Text.Trim();
             settings.TodoExpandedDisplay        = ChkTodoExpandedDisplay.IsChecked ?? false;
             settings.TodoIsPassThrough          = ChkTodoPassThrough.IsChecked ?? false;
             settings.TrayDoubleClickTodoEnabled = ChkTrayDoubleClick.IsChecked ?? true;
@@ -342,7 +340,6 @@ namespace WinKit.Common
             var settings = _settingsManager.Settings;
             settings.HotkeyTodoTopToggle           = "Ctrl+D";
             settings.HotkeyClipboardToggle         = "Win+V";
-            settings.HotkeyTodoSaveAndExit         = "Ctrl+S";
             settings.TodoExpandedDisplay           = false;
             settings.TrayDoubleClickTodoEnabled    = true;
             settings.RecycleBinRetentionDays       = 60;

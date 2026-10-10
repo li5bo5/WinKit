@@ -23,12 +23,26 @@ namespace WinKit.Todo.Services
             _storage = new JsonLinesStorage<TodoItem>(filePath);
         }
 
+        private static bool _faultNotified = false;
+
         /// <summary>
         /// 从存储文件加载全部待办事项
         /// </summary>
         public List<TodoItem> LoadTodos()
         {
             var list = _storage.Load();
+            if (_storage.HasReadFault && !_faultNotified)
+            {
+                _faultNotified = true;
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        "待办数据文件读取遇到异常（可能被占用），已开启保护模式：本次会话不会自动保存覆盖，请检查文件占用并适时重启软件。",
+                        "WinKit 数据保护",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                }));
+            }
             // 若包含序号则按序号排序，否则保持原有顺序
             return list.OrderBy(t => t.Order).ToList();
         }

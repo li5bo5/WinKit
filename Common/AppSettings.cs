@@ -47,17 +47,12 @@ namespace WinKit.Common
         public int ClipboardImageRetentionDays { get; set; } = 15;
         /// <summary>剪贴板图片最大缓存占用空间，默认 100MB (50~2048)</summary>
         public int ClipboardImageMaxStorageMB { get; set; } = 100;
-        /// <summary>剪贴板允许置顶的最大条目目数，默认 5 条 (1~20)</summary>
-        public int ClipboardMaxPinnedItems { get; set; } = 5;
 
         // ── 自定义快捷键设置 ────────────────────────────
-        /// <summary>置顶显示快捷键（置顶时取消置顶，未置顶时置顶并取消穿透）</summary>
+        /// <summary>唤出 / 隐藏待办清单窗口（默认 Ctrl+D）</summary>
         public string HotkeyTodoTopToggle { get; set; } = "Ctrl+D";
 
         /// <summary>唤出 / 隐藏剪贴板窗口（默认 Win+V）</summary>
         public string HotkeyClipboardToggle { get; set; } = "Win+V";
-
-        /// <summary>在 Todo 编辑状态下保存并退出</summary>
-        public string HotkeyTodoSaveAndExit { get; set; } = "Ctrl+S";
     }
 }

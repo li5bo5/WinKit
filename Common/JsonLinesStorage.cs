@@ -28,6 +28,11 @@ namespace WinKit.Common
         private Task _currentWriteTask = Task.CompletedTask;
         private bool _isDisposed;
 
+        /// <summary>
+        /// 读失败熔断状态：当文件存在但读取异常时置为 true，拒绝任何空数据覆盖写盘
+        /// </summary>
+        public bool HasReadFault { get; private set; }
+
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
@@ -76,6 +81,7 @@ namespace WinKit.Common
                 }
                 catch (Exception ex)
                 {
+                    HasReadFault = true;
                     System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 读取主文件 {_filePath} 异常 ({ex.Message})");
                     return new List<T>();
                 }
@@ -128,6 +134,7 @@ namespace WinKit.Common
             }
             catch (Exception ex)
             {
+                HasReadFault = true;
                 System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 异步读取 {_filePath} 失败 ({ex.Message})");
             }
 
@@ -140,7 +147,7 @@ namespace WinKit.Common
         /// <param name="items">待保存的数据列表</param>
         public void Save(IEnumerable<T> items)
         {
-            if (items == null) return;
+            if (_isDisposed || items == null || HasReadFault) return;
             var snapshot = items.Where(i => i != null).ToList();
 
             lock (_fileLock)
@@ -188,7 +195,7 @@ namespace WinKit.Common
         /// </summary>
         public async Task SaveAsync(IEnumerable<T> items)
         {
-            if (items == null) return;
+            if (_isDisposed || items == null || HasReadFault) return;
             var snapshot = items.Where(i => i != null).ToList();
 
             var sb = new StringBuilder();
@@ -233,7 +240,7 @@ namespace WinKit.Common
         /// </summary>
         public void QueueSave(IEnumerable<T> items, int debounceMs = 300)
         {
-            if (_isDisposed || items == null) return;
+            if (_isDisposed || items == null || HasReadFault) return;
 
             var snapshot = items.Where(i => i != null).ToList();
 
