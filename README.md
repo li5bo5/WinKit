@@ -140,13 +140,6 @@ dotnet publish WinKit.csproj -c Release -r win-x64 --self-contained true -o Publ
 
 ---
 
-## 🌐 社区认可与支持
-
-本项目已在 **[LINUX DO](https://linux.do)** 极客社区进行开源分享与技术交流，感谢社区佬友们的宝贵建议与支持！  
-👉 **社区讨论与反馈**：[LINUX DO 社区](https://linux.do)
-
----
-
 ## 📄 开源协议
 
 本项目采用 **AGPL-3.0 (GNU Affero General Public License v3.0)** 协议开源。
