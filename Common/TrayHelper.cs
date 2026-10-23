@@ -1,11 +1,9 @@
 using System;
 using System.Drawing;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
-using WinKit.Clipboard.Services;
 using SWF = System.Windows.Forms;
 using WpfApp = System.Windows.Application;
 
@@ -53,19 +51,6 @@ namespace WinKit.Common
         private readonly MenuItem _itemPreferences;
         private readonly MenuItem _itemAbout;
         private readonly MenuItem _itemExit;
-
-        [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
-
-        [DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int X;
-            public int Y;
-        }
 
         public TrayHelper(WpfApp app, SettingsManager settingsManager, Window todoWindow, Window pasteWindow)
         {
@@ -171,20 +156,18 @@ namespace WinKit.Common
                 {
                     _todoWindow.Dispatcher.Invoke(() =>
                     {
-                        POINT mousePos;
-                        GetCursorPos(out mousePos);
-
-                        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(_todoWindow);
+                        NativeMethods.GetCursorPos(out var mousePos);
+                        double scale = NativeMethods.GetScaleForPoint(mousePos.X, mousePos.Y);
 
                         _menuHostWindow.Show();
                         _menuHostWindow.Activate();
                         var hwnd = new WindowInteropHelper(_menuHostWindow).Handle;
-                        SetForegroundWindow(hwnd);
+                        NativeMethods.SetForegroundWindow(hwnd);
 
                         _contextMenu.PlacementTarget = _menuHostWindow;
                         _contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.AbsolutePoint;
-                        _contextMenu.HorizontalOffset = mousePos.X / dpi.DpiScaleX;
-                        _contextMenu.VerticalOffset = mousePos.Y / dpi.DpiScaleY - 2;
+                        _contextMenu.HorizontalOffset = mousePos.X / scale;
+                        _contextMenu.VerticalOffset = mousePos.Y / scale - 2;
 
                         _contextMenu.IsOpen = true;
                     });
@@ -205,21 +188,12 @@ namespace WinKit.Common
                     });
                 }
             };
-
-            // 监听偏好设置变更实时应用不透明度
-            _settingsManager.SettingsChanged += (s, settings) => ApplyOpacity(settings.WindowOpacity);
-
-            // 应用已保存的窗口不透明度
-            ApplyOpacity(_settingsManager.Settings.WindowOpacity);
         }
 
         public void SubscribeHotkeysChanged(Action handler)
         {
             _preferencesWindow.HotkeysChanged += handler;
         }
-
-        public void SyncPinMenuItem() { }
-        public void SyncPassThroughMenuItem() { }
 
         public void ShowPreferencesWindow()
         {
@@ -229,11 +203,6 @@ namespace WinKit.Common
                 {
                     todoWin.IsPreferencesWindowOpen = true;
                     todoWin.HideInlineInput();
-                    if (todoWin.ActiveEditDialog != null)
-                    {
-                        todoWin.ActiveEditDialog.Close();
-                        todoWin.ActiveEditDialog = null;
-                    }
                 }
             });
 
@@ -263,16 +232,6 @@ namespace WinKit.Common
             });
         }
 
-        public void ApplyOpacity(int level)
-        {
-            _todoWindow.Dispatcher.Invoke(() =>
-            {
-                double opacity = level / 100.0;
-                _todoWindow.Opacity = opacity;
-                _pasteWindow.Opacity = opacity;
-            });
-        }
-
         private void ShutdownApp()
         {
             _icon.Visible = false;
@@ -294,10 +253,6 @@ namespace WinKit.Common
             {
                 if (_icon != null)
                 {
-                    // 幂等设置即可，切勿做 Visible 翻转（false → true）。
-                    // 翻转会先发 NIM_DELETE 撤掉图标，若随后的 NIM_ADD 失败
-                    // （Shell 尚未就绪等），Windows 将彻底丢失这个托盘图标，
-                    // 连 NotifyIconSettings 记录都不会留下，且失败时不抛异常、无法感知。
                     _icon.Visible = true;
                 }
             }

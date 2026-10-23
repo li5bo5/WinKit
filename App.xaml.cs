@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -30,10 +30,7 @@ namespace WinKit
         private Clipboard.MainWindow? _pasteWindow;
         private QuickPhraseWindow?    _quickPhraseWindow;
 
-        public ClipboardManager?    ClipboardManager    => _clipboardManager;
-        public SettingsManager?     SettingsManager     => _settingsManager;
         public KeyboardHookService? KeyboardHookService => _keyboardHookService;
-        public QuickPhraseManager?  QuickPhraseManager  => _quickPhraseManager;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -182,9 +179,10 @@ namespace WinKit
                 });
             });
 
-            // ── 2. 唤出 / 隐藏剪贴板（受剪贴板监控总开关控制）────────
+            // ── 2. 唤出 / 隐藏剪贴板（受剪贴板监控总开关控制，同步启停监听服务）────────
             if (settings.PasteEnableMonitoring)
             {
+                _clipboardService?.StartMonitoring();
                 _keyboardHookService.RegisterHotkey(settings.HotkeyClipboardToggle, () =>
                 {
                     Dispatcher.BeginInvoke(() =>
@@ -196,6 +194,10 @@ namespace WinKit
                             _pasteWindow.ShowAtMouse();
                     });
                 });
+            }
+            else
+            {
+                _clipboardService?.StopMonitoring();
             }
         }
 

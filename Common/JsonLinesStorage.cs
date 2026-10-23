@@ -25,8 +25,8 @@ namespace WinKit.Common
         private readonly object _queueLock = new();
         private List<T>? _pendingItems;
         private CancellationTokenSource? _debounceCts;
-        private Task _currentWriteTask = Task.CompletedTask;
         private bool _isDisposed;
+        private bool _faultNotified;
 
         /// <summary>
         /// 读失败熔断状态：当文件存在但读取异常时置为 true，拒绝任何空数据覆盖写盘
@@ -83,62 +83,22 @@ namespace WinKit.Common
                 {
                     HasReadFault = true;
                     System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 读取主文件 {_filePath} 异常 ({ex.Message})");
+                    if (!_faultNotified)
+                    {
+                        _faultNotified = true;
+                        string fileName = Path.GetFileName(_filePath);
+                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            System.Windows.MessageBox.Show(
+                                $"数据文件 ({fileName}) 读取遇到异常（可能被占用），已开启保护模式：本次会话不会自动保存覆盖，请检查文件占用并适时重启软件。",
+                                "WinKit 数据保护",
+                                System.Windows.MessageBoxButton.OK,
+                                System.Windows.MessageBoxImage.Warning);
+                        }));
+                    }
                     return new List<T>();
                 }
             }
-        }
-
-        /// <summary>
-        /// 异步逐行容错加载数据列表
-        /// </summary>
-        public async Task<List<T>> LoadAsync()
-        {
-            if (!File.Exists(_filePath))
-            {
-                try
-                {
-                    await File.WriteAllTextAsync(_filePath, string.Empty, Encoding.UTF8).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 创建空白文件 {_filePath} 失败 ({ex.Message})");
-                }
-                return new List<T>();
-            }
-
-            var list = new List<T>();
-            try
-            {
-                using var stream = new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var reader = new StreamReader(stream, Encoding.UTF8);
-
-                string? line;
-                while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
-                {
-                    var trimmed = line.Trim();
-                    if (string.IsNullOrWhiteSpace(trimmed)) continue;
-
-                    try
-                    {
-                        var item = JsonSerializer.Deserialize<T>(trimmed, JsonOptions);
-                        if (item != null)
-                        {
-                            list.Add(item);
-                        }
-                    }
-                    catch (JsonException jsonEx)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 跳过损坏行 ({jsonEx.Message}) -> {trimmed}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                HasReadFault = true;
-                System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 异步读取 {_filePath} 失败 ({ex.Message})");
-            }
-
-            return list;
         }
 
         /// <summary>
@@ -191,51 +151,6 @@ namespace WinKit.Common
         }
 
         /// <summary>
-        /// 原生异步原子持久化保存数据
-        /// </summary>
-        public async Task SaveAsync(IEnumerable<T> items)
-        {
-            if (_isDisposed || items == null || HasReadFault) return;
-            var snapshot = items.Where(i => i != null).ToList();
-
-            var sb = new StringBuilder();
-            foreach (var item in snapshot)
-            {
-                var line = JsonSerializer.Serialize(item, JsonOptions);
-                sb.AppendLine(line);
-            }
-
-            try
-            {
-                await File.WriteAllTextAsync(_tmpFilePath, sb.ToString(), Encoding.UTF8).ConfigureAwait(false);
-
-                lock (_fileLock)
-                {
-                    File.Move(_tmpFilePath, _filePath, overwrite: true);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 异步原子写入 {_filePath} 失败 ({ex.Message})");
-                throw;
-            }
-            finally
-            {
-                try
-                {
-                    if (File.Exists(_tmpFilePath))
-                    {
-                        File.Delete(_tmpFilePath);
-                    }
-                }
-                catch
-                {
-                    // 忽略清理异常
-                }
-            }
-        }
-
-        /// <summary>
         /// 队列防抖保存（默认 300ms 防抖合并，适合高频连续修改）
         /// </summary>
         public void QueueSave(IEnumerable<T> items, int debounceMs = 300)
@@ -252,7 +167,7 @@ namespace WinKit.Common
                 _debounceCts = new CancellationTokenSource();
                 var token = _debounceCts.Token;
 
-                _currentWriteTask = Task.Run(async () =>
+                _ = Task.Run(async () =>
                 {
                     try
                     {
@@ -266,7 +181,7 @@ namespace WinKit.Common
 
                         if (toWrite != null && !token.IsCancellationRequested)
                         {
-                            await SaveAsync(toWrite).ConfigureAwait(false);
+                            Save(toWrite);
                         }
                     }
                     catch (OperationCanceledException)
@@ -278,36 +193,6 @@ namespace WinKit.Common
                         System.Diagnostics.Debug.WriteLine($"JsonLinesStorage: 防抖队列写入失败 ({ex.Message})");
                     }
                 }, token);
-            }
-        }
-
-        /// <summary>
-        /// 强制立即刷盘（退出或关键操作时调用）
-        /// </summary>
-        public async Task FlushAsync()
-        {
-            List<T>? toWrite = null;
-            lock (_queueLock)
-            {
-                _debounceCts?.Cancel();
-                toWrite = _pendingItems;
-                _pendingItems = null;
-            }
-
-            if (toWrite != null)
-            {
-                await SaveAsync(toWrite).ConfigureAwait(false);
-            }
-            else
-            {
-                try
-                {
-                    await _currentWriteTask.ConfigureAwait(false);
-                }
-                catch
-                {
-                    // 忽略任务异常
-                }
             }
         }
 

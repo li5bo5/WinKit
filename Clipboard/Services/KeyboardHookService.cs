@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Interop;
 using WinKit.Common;
 
 namespace WinKit.Clipboard.Services
@@ -185,64 +183,13 @@ namespace WinKit.Clipboard.Services
 
         private long _lastVKeyDownTicks = 0;
         private bool _vKeyWasReleased = true;
-        private readonly uint _currentProcessId = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+        private readonly uint _currentProcessId = (uint)Environment.ProcessId;
         private const int VV_INTERVAL_THRESHOLD_MS = 350; // 常用短语 vv 连击判定时间阈值 (350ms)
-
-        // ── Win32 常量 ─────────────────────────────────────────────────
-        private const int WH_KEYBOARD_LL = 13;
-        private const int WM_KEYDOWN     = 0x0100;
-        private const int WM_KEYUP       = 0x0101;
-        private const int WM_SYSKEYDOWN  = 0x0104;
-        private const int WM_SYSKEYUP    = 0x0105;
-
-        public const int VK_LWIN   = 0x5B;
-        public const int VK_RWIN   = 0x5C;
-        public const int VK_CTRL   = 0x11;
-        public const int VK_ALT    = 0x12;
-        public const int VK_SHIFT  = 0x10;
-        public const int VK_V      = 0x56;
-        public const int VK_BACK   = 0x08;
-        public const int VK_ESCAPE = 0x1B;
-
-        private const uint KEYEVENTF_KEYUP = 0x0002;
-        private const int LLKHF_INJECTED   = 0x0010;
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct KBDLLHOOKSTRUCT
-        {
-            public int vkCode;
-            public int scanCode;
-            public int flags;
-            public int time;
-            public UIntPtr dwExtraInfo;
-        }
-
-        // ── P/Invoke ───────────────────────────────────────────────────
-        private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int id, LowLevelKeyboardProc proc, IntPtr hMod, uint threadId);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        [DllImport("user32.dll")]
-        private static extern short GetAsyncKeyState(int vKey);
-
-        [DllImport("user32.dll")]
-        public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         // ── 已注册的热键表 ─────────────────────────────────────────────
         private readonly List<(HotkeyDescriptor Desc, Func<bool> Callback)> _hotkeys = new();
 
-        private LowLevelKeyboardProc? _proc;
+        private NativeMethods.LowLevelProc? _proc;
         private IntPtr _hookID = IntPtr.Zero;
 
         public KeyboardHookService()
@@ -255,7 +202,7 @@ namespace WinKit.Clipboard.Services
         {
             if (_hookID != IntPtr.Zero)
             {
-                UnhookWindowsHookEx(_hookID);
+                NativeMethods.UnhookWindowsHookEx(_hookID);
                 _hookID = IntPtr.Zero;
             }
 
@@ -268,15 +215,6 @@ namespace WinKit.Clipboard.Services
                     _hookID = SetHook(_proc);
                 }
             }
-        }
-
-        // ── 已有构造函数重载，保持向后兼容 ─────────────────────────────
-        /// <summary>
-        /// 直接用单个 Win+V 回调构造（向后兼容旧调用方式）
-        /// </summary>
-        public KeyboardHookService(Action onWinVPressed) : this()
-        {
-            RegisterHotkey("Win+V", onWinVPressed);
         }
 
         // ── 公开 API ───────────────────────────────────────────────────
@@ -301,98 +239,19 @@ namespace WinKit.Clipboard.Services
             _hotkeys.Add((desc, callback));
         }
 
-        /// <summary>注销指定热键字符串</summary>
-        public void UnregisterHotkey(string hotkeyString)
-        {
-            var desc = HotkeyDescriptor.Parse(hotkeyString);
-            if (desc == null) return;
-            _hotkeys.RemoveAll(h => h.Desc.VkCode == desc.VkCode
-                                 && h.Desc.Win == desc.Win
-                                 && h.Desc.Ctrl == desc.Ctrl
-                                 && h.Desc.Alt == desc.Alt
-                                 && h.Desc.Shift == desc.Shift);
-        }
-
         /// <summary>注销所有已注册的热键</summary>
         public void UnregisterAll()
         {
             _hotkeys.Clear();
         }
 
-        /// <summary>
-        /// 模拟按下指定的快捷键组合（例如模拟发送 Win+Shift+S 或 Win+Shift+T）
-        /// </summary>
-        public static void SimulateKeyCombination(bool win, bool shift, bool ctrl, bool alt, byte vk)
-        {
-            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
-            {
-                // 1. 强制释放当前可能处于按下状态的物理修饰键，避免系统组合键状态混淆
-                keybd_event((byte)VK_LWIN,  0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                keybd_event((byte)VK_RWIN,  0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                keybd_event((byte)VK_CTRL,  0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                keybd_event((byte)VK_ALT,   0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                keybd_event((byte)VK_SHIFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-                System.Threading.Thread.Sleep(50); // 确保系统底层按键状态同步
-
-                // 2. 依次模拟按下目标修饰键
-                if (win)
-                {
-                    keybd_event((byte)VK_LWIN, 0, 0, UIntPtr.Zero);
-                    System.Threading.Thread.Sleep(10);
-                }
-                if (ctrl)
-                {
-                    keybd_event((byte)VK_CTRL, 0, 0, UIntPtr.Zero);
-                    System.Threading.Thread.Sleep(10);
-                }
-                if (alt)
-                {
-                    keybd_event((byte)VK_ALT, 0, 0, UIntPtr.Zero);
-                    System.Threading.Thread.Sleep(10);
-                }
-                if (shift)
-                {
-                    keybd_event((byte)VK_SHIFT, 0, 0, UIntPtr.Zero);
-                    System.Threading.Thread.Sleep(10);
-                }
-
-                // 3. 模拟按下并释放目标主键
-                keybd_event(vk, 0, 0, UIntPtr.Zero);
-                System.Threading.Thread.Sleep(30);
-                keybd_event(vk, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                System.Threading.Thread.Sleep(10);
-
-                // 4. 依次释放目标修饰键
-                if (shift)
-                {
-                    keybd_event((byte)VK_SHIFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                    System.Threading.Thread.Sleep(10);
-                }
-                if (alt)
-                {
-                    keybd_event((byte)VK_ALT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                    System.Threading.Thread.Sleep(10);
-                }
-                if (ctrl)
-                {
-                    keybd_event((byte)VK_CTRL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                    System.Threading.Thread.Sleep(10);
-                }
-                if (win)
-                {
-                    keybd_event((byte)VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                }
-            });
-        }
-
         // ── 钩子核心 ──────────────────────────────────────────────────
-        private IntPtr SetHook(LowLevelKeyboardProc proc)
+        private IntPtr SetHook(NativeMethods.LowLevelProc proc)
         {
             using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
             using var curModule  = curProcess.MainModule;
             if (curModule?.ModuleName != null)
-                return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
+                return NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, proc, NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
             return IntPtr.Zero;
         }
 
@@ -400,50 +259,50 @@ namespace WinKit.Clipboard.Services
         {
             if (nCode >= 0)
             {
-                var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                
+                var hookStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
+
                 // 软件注入的按键直接放行，避免模拟按键时死循环或被自身拦截
-                if ((hookStruct.flags & LLKHF_INJECTED) != 0)
+                if ((hookStruct.flags & NativeMethods.LLKHF_INJECTED) != 0)
                 {
-                    return CallNextHookEx(_hookID, nCode, wParam, lParam);
+                    return NativeMethods.CallNextHookEx(_hookID, nCode, wParam, lParam);
                 }
 
                 int vkCode  = hookStruct.vkCode;
                 int message = wParam.ToInt32();
 
                 // 释放按键监听，重置长按状态
-                if (message == WM_KEYUP || message == WM_SYSKEYUP)
+                if (message == NativeMethods.WM_KEYUP || message == NativeMethods.WM_SYSKEYUP)
                 {
-                    if (vkCode == VK_V)
+                    if (vkCode == NativeMethods.VK_V)
                     {
                         _vKeyWasReleased = true;
                     }
                 }
 
-                bool isKeyDown = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+                bool isKeyDown = message == NativeMethods.WM_KEYDOWN || message == NativeMethods.WM_SYSKEYDOWN;
                 if (isKeyDown)
                 {
-                    bool lwinDown  = (GetAsyncKeyState(VK_LWIN)  & 0x8000) != 0;
-                    bool rwinDown  = (GetAsyncKeyState(VK_RWIN)  & 0x8000) != 0;
-                    bool ctrlDown  = (GetAsyncKeyState(VK_CTRL)  & 0x8000) != 0;
-                    bool altDown   = (GetAsyncKeyState(VK_ALT)   & 0x8000) != 0;
-                    bool shiftDown = (GetAsyncKeyState(VK_SHIFT)  & 0x8000) != 0;
+                    bool lwinDown  = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LWIN)  & 0x8000) != 0;
+                    bool rwinDown  = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_RWIN)  & 0x8000) != 0;
+                    bool ctrlDown  = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_CTRL)  & 0x8000) != 0;
+                    bool altDown   = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ALT)   & 0x8000) != 0;
+                    bool shiftDown = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
 
                     // 处于快捷键捕获录入状态时，不触发应用内部任何热键，若带 Win 键则注入 0xFF 防止呼出系统开始菜单
                     if (IsCapturing)
                     {
                         if (lwinDown || rwinDown)
                         {
-                            keybd_event(0xFF, 0, 0, UIntPtr.Zero);
-                            keybd_event(0xFF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                            NativeMethods.keybd_event(0xFF, 0, 0, UIntPtr.Zero);
+                            NativeMethods.keybd_event(0xFF, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
                         }
-                        return CallNextHookEx(_hookID, nCode, wParam, lParam);
+                        return NativeMethods.CallNextHookEx(_hookID, nCode, wParam, lParam);
                     }
 
                     // ── 常用短语 vv 连击判定 ───────────────────────────────
                     if (QuickPhraseEnabled && !lwinDown && !rwinDown && !ctrlDown && !altDown && !shiftDown)
                     {
-                        if (vkCode == VK_V)
+                        if (vkCode == NativeMethods.VK_V)
                         {
                             if (_vKeyWasReleased)
                             {
@@ -464,11 +323,9 @@ namespace WinKit.Clipboard.Services
                                         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                                         {
                                             // 退格键擦除拼音流中的第一个 "v"
-                                            // 注意：由于我们在当前钩子中直接拦截了第二个物理 v，系统和输入法中自始至终只有 1 个 v！
-                                            // 仅模拟 1 次 Backspace 即可 100% 精准清空，彻底根治时序竞态导致的残存 "v" 问题。
-                                            keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
+                                            NativeMethods.keybd_event(NativeMethods.VK_BACK, 0, 0, UIntPtr.Zero);
                                             System.Threading.Thread.Sleep(15);
-                                            keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                                            NativeMethods.keybd_event(NativeMethods.VK_BACK, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
                                             System.Threading.Thread.Sleep(35);
 
                                             // 唤出常用短语窗口，传递 targetHwnd
@@ -486,24 +343,17 @@ namespace WinKit.Clipboard.Services
                                 {
                                     // 仅当前台窗口处于中文输入状态时才记录第一个 v 的时间戳；英文状态直接忽略
                                     IntPtr fgWnd = NativeMethods.GetForegroundWindow();
-                                    if (NativeMethods.IsChineseInputMode(fgWnd))
-                                    {
-                                        _lastVKeyDownTicks = now;
-                                    }
-                                    else
-                                    {
-                                        _lastVKeyDownTicks = 0;
-                                    }
+                                    _lastVKeyDownTicks = NativeMethods.IsChineseInputMode(fgWnd) ? now : 0;
                                 }
                             }
                         }
-                        else if (vkCode != VK_LWIN && vkCode != VK_RWIN && vkCode != VK_CTRL && vkCode != VK_ALT && vkCode != VK_SHIFT)
+                        else if (vkCode != NativeMethods.VK_LWIN && vkCode != NativeMethods.VK_RWIN && vkCode != NativeMethods.VK_CTRL && vkCode != NativeMethods.VK_ALT && vkCode != NativeMethods.VK_SHIFT)
                         {
                             // 敲击了其他字符键，重置 vv 计时
                             _lastVKeyDownTicks = 0;
                         }
                     }
-                    else if (vkCode != VK_V)
+                    else if (vkCode != NativeMethods.VK_V)
                     {
                         _lastVKeyDownTicks = 0;
                     }
@@ -518,8 +368,8 @@ namespace WinKit.Clipboard.Services
                                 // 若涉及 Win 键，注入 0xFF 防止开始菜单弹出
                                 if (desc.Win)
                                 {
-                                    keybd_event(0xFF, 0, 0, UIntPtr.Zero);
-                                    keybd_event(0xFF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                                    NativeMethods.keybd_event(0xFF, 0, 0, UIntPtr.Zero);
+                                    NativeMethods.keybd_event(0xFF, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
                                 }
                                 // 拦截按键，不传递给系统
                                 return (IntPtr)1;
@@ -528,14 +378,14 @@ namespace WinKit.Clipboard.Services
                     }
                 }
             }
-            return CallNextHookEx(_hookID, nCode, wParam, lParam);
+            return NativeMethods.CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
 
         public void Dispose()
         {
             if (_hookID != IntPtr.Zero)
             {
-                UnhookWindowsHookEx(_hookID);
+                NativeMethods.UnhookWindowsHookEx(_hookID);
                 _hookID = IntPtr.Zero;
             }
             _hotkeys.Clear();
@@ -551,57 +401,14 @@ namespace WinKit.Clipboard.Services
     /// </summary>
     public class GlobalMouseClickMonitor : IDisposable
     {
-        private const int WH_MOUSE_LL   = 14;
-        private const int WM_LBUTTONDOWN = 0x0201;
-        private const int WM_RBUTTONDOWN = 0x0204;
-        private const int WM_MBUTTONDOWN = 0x0207;
-        private const int WM_NCLBUTTONDOWN = 0x00A1;
-
-        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int id, LowLevelMouseProc proc, IntPtr hMod, uint threadId);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr WindowFromPoint(POINT point);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MSLLHOOKSTRUCT
-        {
-            public POINT pt;
-            public uint  mouseData;
-            public uint  flags;
-            public uint  time;
-            public IntPtr dwExtraInfo;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct POINT { public int X; public int Y; }
-
-        private LowLevelMouseProc? _proc;
-        private IntPtr  _hookID = IntPtr.Zero;
+        private NativeMethods.LowLevelProc? _proc;
+        private IntPtr _hookID = IntPtr.Zero;
 
         /// <summary>用于判断点击位置是否"属于"被保护窗口的 hwnd 集合</summary>
         private readonly HashSet<IntPtr> _protectedHwnds = new();
 
         /// <summary>点击发生在保护窗口外部时触发</summary>
         public event Action? ClickedOutside;
-
-        // GA_ROOT = 2（获取顶层父窗口）
-        private const uint GA_ROOT = 2;
 
         public void Start(IEnumerable<IntPtr> protectedHwnds)
         {
@@ -610,16 +417,17 @@ namespace WinKit.Clipboard.Services
 
             if (_hookID != IntPtr.Zero) return; // 已在运行
 
-            _proc   = MouseHookCallback;
+            _proc = MouseHookCallback;
             using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
             using var curModule  = curProcess.MainModule;
             if (curModule?.ModuleName != null)
             {
-                _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+                IntPtr hMod = NativeMethods.GetModuleHandle(curModule.ModuleName);
+                _hookID = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc, hMod, 0);
                 if (_hookID == IntPtr.Zero)
                 {
                     System.Threading.Thread.Sleep(30);
-                    _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+                    _hookID = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _proc, hMod, 0);
                 }
             }
         }
@@ -628,7 +436,7 @@ namespace WinKit.Clipboard.Services
         {
             if (_hookID != IntPtr.Zero)
             {
-                UnhookWindowsHookEx(_hookID);
+                NativeMethods.UnhookWindowsHookEx(_hookID);
                 _hookID = IntPtr.Zero;
             }
         }
@@ -638,11 +446,12 @@ namespace WinKit.Clipboard.Services
             if (nCode >= 0)
             {
                 int msg = wParam.ToInt32();
-                if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN || msg == WM_NCLBUTTONDOWN)
+                if (msg == NativeMethods.WM_LBUTTONDOWN || msg == NativeMethods.WM_RBUTTONDOWN ||
+                    msg == NativeMethods.WM_MBUTTONDOWN || msg == NativeMethods.WM_NCLBUTTONDOWN)
                 {
-                    var info  = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                    var hwndClicked   = WindowFromPoint(info.pt);
-                    var rootClicked   = GetAncestor(hwndClicked, GA_ROOT);
+                    var info        = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+                    var hwndClicked = NativeMethods.WindowFromPoint(info.pt);
+                    var rootClicked = NativeMethods.GetAncestor(hwndClicked, NativeMethods.GA_ROOT);
 
                     // 检查点击的根窗口是否属于受保护的集合
                     bool isProtected = _protectedHwnds.Contains(hwndClicked)
@@ -654,7 +463,7 @@ namespace WinKit.Clipboard.Services
                     }
                 }
             }
-            return CallNextHookEx(_hookID, nCode, wParam, lParam);
+            return NativeMethods.CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
 
         public void Dispose() => Stop();

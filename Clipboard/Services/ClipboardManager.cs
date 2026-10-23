@@ -17,21 +17,11 @@ namespace WinKit.Clipboard.Services
         private readonly ObservableCollection<ClipboardItem> _items = new();
 
         public ObservableCollection<ClipboardItem> Items => _items;
-        public int TotalCount => _items.Count;
 
         public ClipboardManager(SettingsManager settingsManager)
         {
             _settingsManager = settingsManager;
             _storage = new JsonLinesStorage<ClipboardItem>(AppPaths.Clipboard);
-
-            _settingsManager.SettingsChanged += OnSettingsChanged;
-            LoadInitialData();
-        }
-
-        public ClipboardManager(SettingsManager settingsManager, string filePath)
-        {
-            _settingsManager = settingsManager;
-            _storage = new JsonLinesStorage<ClipboardItem>(filePath);
 
             _settingsManager.SettingsChanged += OnSettingsChanged;
             LoadInitialData();
@@ -130,7 +120,7 @@ namespace WinKit.Clipboard.Services
                 string text = newItem.Content.Trim();
                 if (settings.PasteEnableTextDeduplication)
                 {
-                    var duplicates = _items.Where(i => i.IsText && i.Content == text).ToList();
+                    var duplicates = _items.Where(i => i.IsText && i.Content?.Trim() == text).ToList();
                     foreach (var dup in duplicates)
                     {
                         // 若原已有项处于置顶状态，新条目继承置顶标记
@@ -144,7 +134,8 @@ namespace WinKit.Clipboard.Services
                 }
                 else
                 {
-                    if (_items.Count > 0 && _items[0].IsText && _items[0].Content == text)
+                    var latestUnpinned = _items.FirstOrDefault(i => !i.IsPinned);
+                    if (latestUnpinned != null && latestUnpinned.IsText && latestUnpinned.Content?.Trim() == text)
                         return;
                 }
             }
@@ -169,19 +160,6 @@ namespace WinKit.Clipboard.Services
 
             EnforceMaxCapacity();
             _storage.QueueSave(_items, 500);
-        }
-
-        public void AddTextItem(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return;
-            AddItem(new ClipboardItem
-            {
-                Id = Guid.NewGuid(),
-                Type = ClipboardItemType.Text,
-                ContentType = "Text",
-                Content = text.Trim(),
-                CreatedAt = DateTimeOffset.Now
-            });
         }
 
         /// <summary>
@@ -211,28 +189,6 @@ namespace WinKit.Clipboard.Services
                         }
                     }
                 }
-            }
-        }
-
-        public void MoveToTop(ClipboardItem item)
-        {
-            if (item == null) return;
-            var index = _items.IndexOf(item);
-            if (index > 0)
-            {
-                _items.RemoveAt(index);
-                if (item.IsPinned)
-                {
-                    item.PinnedAt = DateTimeOffset.Now;
-                    _items.Insert(0, item);
-                }
-                else
-                {
-                    item.CreatedAt = DateTimeOffset.Now;
-                    int insertIdx = _items.Count(i => i.IsPinned);
-                    _items.Insert(insertIdx, item);
-                }
-                _storage.QueueSave(_items, 500);
             }
         }
 
@@ -318,7 +274,7 @@ namespace WinKit.Clipboard.Services
         {
             try
             {
-                _storage.FlushAsync().GetAwaiter().GetResult();
+                _storage.Flush();
             }
             catch
             {

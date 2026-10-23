@@ -34,15 +34,12 @@ namespace WinKit.Common
         public string ThemeMode { get; set; } = "System";
         /// <summary>窗口不透明度（40 ~ 100）</summary>
         public int WindowOpacity { get; set; } = 100; // 默认 100%
-        /// <summary>开机自动启动</summary>
-        public bool AutoStart { get; set; } = true;
 
         // ── Clipboard 剪贴板设置 ────────────────────────
         public int PasteMaxItems { get; set; } = 300;
         public bool PasteEnableTextDeduplication { get; set; } = true;
         public bool PasteEnableMonitoring { get; set; } = true;
         public bool PasteRememberScrollPosition { get; set; } = false;
-        public bool PasteIsPinned { get; set; } = false;
         /// <summary>剪贴板图片历史保留天数，默认 15 天 (1~365)</summary>
         public int ClipboardImageRetentionDays { get; set; } = 15;
         /// <summary>剪贴板图片最大缓存占用空间，默认 100MB (50~2048)</summary>

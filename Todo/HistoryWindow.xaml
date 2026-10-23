@@ -115,6 +115,7 @@
                                                 VerticalAlignment="Center"
                                                 Panel.ZIndex="10"
                                                 Opacity="0"
+                                                IsHitTestVisible="False"
                                                 Margin="0,0,2,0">
                                         <!-- 还原按钮 -->
                                         <Button Content="⟲"
@@ -134,6 +135,7 @@
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                     <Setter TargetName="OverlayActions" Property="Opacity" Value="1"/>
+                                    <Setter TargetName="OverlayActions" Property="IsHitTestVisible" Value="True"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>

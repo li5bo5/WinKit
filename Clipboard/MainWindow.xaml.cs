@@ -1,9 +1,6 @@
-﻿using System;
+using System;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,7 +15,6 @@ using WinPoint = System.Windows.Point;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using Button = System.Windows.Controls.Button;
-using DrawingImage = System.Drawing.Image;
 
 namespace WinKit.Clipboard
 {
@@ -45,17 +41,6 @@ namespace WinKit.Clipboard
 
         // ── 搜索过滤视图 ──────────────────────────────
         private readonly ICollectionView _view;
-
-        // ── Win32 P/Invoke ─────────────────────────────
-        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
-        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-        [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hWnd);
-        [DllImport("user32.dll")] private static extern int  GetWindowLong(IntPtr hwnd, int index);
-        [DllImport("user32.dll")] private static extern int  SetWindowLong(IntPtr hwnd, int index, int newStyle);
-        [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-                                                                           int x, int y, int cx, int cy, uint uFlags);
-
-        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X; public int Y; }
 
         // ══════════════════════════════════════════════
         // 构造函数
@@ -105,8 +90,8 @@ namespace WinKit.Clipboard
         {
             base.OnSourceInitialized(e);
             var hwnd    = new WindowInteropHelper(this).Handle;
-            int exStyle = GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-            SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_TOOLWINDOW);
+            int exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
+            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_TOOLWINDOW);
             HwndSource.FromHwnd(hwnd)?.AddHook(WndProc);
         }
 
@@ -271,13 +256,13 @@ namespace WinKit.Clipboard
         public void ShowAtMouse()
         {
             // ① 呼出前立即记录当前前台窗口（排除本进程自身窗口）
-            IntPtr fgWnd = GetForegroundWindow();
+            IntPtr fgWnd = NativeMethods.GetForegroundWindow();
             var selfHwnd = new WindowInteropHelper(this).EnsureHandle();
-            if (fgWnd != IntPtr.Zero && fgWnd != selfHwnd && !NativeMethods.IsOwnWindow(fgWnd) && IsWindow(fgWnd))
+            if (fgWnd != IntPtr.Zero && fgWnd != selfHwnd && !NativeMethods.IsOwnWindow(fgWnd) && NativeMethods.IsWindow(fgWnd))
                 _lastTargetHwnd = fgWnd;
 
             // ② 按目标屏幕自身 DPI 计算弹出物理坐标（解决多显示器不同缩放比例下的跨屏定位偏差）
-            GetCursorPos(out POINT mousePos);
+            NativeMethods.GetCursorPos(out var mousePos);
             var screen   = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(mousePos.X, mousePos.Y));
             var area     = screen.WorkingArea;
             double scale = NativeMethods.GetScaleForPoint(mousePos.X, mousePos.Y);
@@ -314,7 +299,7 @@ namespace WinKit.Clipboard
             WindowState = WindowState.Normal;
 
             // 使用物理像素直接定位并置顶，避免跨 DPI 屏幕时的逻辑坐标换算漂移
-            SetWindowPos(selfHwnd, NativeMethods.HWND_TOPMOST, physLeft, physTop, 0, 0,
+            NativeMethods.SetWindowPos(selfHwnd, NativeMethods.HWND_TOPMOST, physLeft, physTop, 0, 0,
                 NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW);
 
             Activate();
@@ -456,10 +441,10 @@ namespace WinKit.Clipboard
                 }
 
                 // 3. 精准归还前台焦点至目标输入窗口
-                if (_lastTargetHwnd != IntPtr.Zero && IsWindow(_lastTargetHwnd))
+                if (_lastTargetHwnd != IntPtr.Zero && NativeMethods.IsWindow(_lastTargetHwnd))
                 {
                     NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
-                    for (int wait = 0; wait < 6 && GetForegroundWindow() != _lastTargetHwnd; wait++)
+                    for (int wait = 0; wait < 6 && NativeMethods.GetForegroundWindow() != _lastTargetHwnd; wait++)
                     {
                         await Task.Delay(30);
                     }
@@ -467,7 +452,7 @@ namespace WinKit.Clipboard
                 }
 
                 // 4. 模拟 Ctrl+V 粘贴（确保前台不是本进程窗口，防止误贴进自身）
-                if (!NativeMethods.IsOwnWindow(GetForegroundWindow()))
+                if (!NativeMethods.IsOwnWindow(NativeMethods.GetForegroundWindow()))
                 {
                     NativeMethods.SimulateCtrlV();
                 }
@@ -578,7 +563,7 @@ namespace WinKit.Clipboard
                 bool success = _clipboardManager.TogglePin(item);
                 if (!success)
                 {
-                    System.Windows.MessageBox.Show(this, $"最多只能置顶 {Clipboard.Services.ClipboardManager.MaxPinnedItems} 个条目", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    System.Windows.MessageBox.Show(this, $"最多只能置顶 {ClipboardManager.MaxPinnedItems} 个条目", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 e.Handled = true;
             }
@@ -595,7 +580,7 @@ namespace WinKit.Clipboard
         }
 
         // ══════════════════════════════════════════════
-        // 右下角 ResizeGrip 调整窗口大小
+        // 右下角 ResizeGrip 调整窗口大小（含工作区边界钳制）
         // ══════════════════════════════════════════════
         private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -612,10 +597,7 @@ namespace WinKit.Clipboard
         private void ResizeGrip_MouseMove(object sender, MouseEventArgs e)
         {
             if (!_isResizing) return;
-            var    pos   = e.GetPosition(null);
-            var    delta = pos - _resizeStart;
-            Width  = Math.Max(MinWidth,  _resizeStartW + delta.X);
-            Height = Math.Max(MinHeight, _resizeStartH + delta.Y);
+            NativeMethods.ApplyResizeWithScreenClamp(this, _resizeStartW, _resizeStartH, e.GetPosition(null) - _resizeStart);
         }
 
         private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)

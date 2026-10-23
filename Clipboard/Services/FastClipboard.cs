@@ -33,8 +33,8 @@ namespace WinKit.Clipboard.Services
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool GlobalUnlock(IntPtr hMem);
 
-        [DllImport("ole32.dll")]
-        private static extern int OleFlushClipboard();
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GlobalFree(IntPtr hMem);
 
         /// <summary>
         /// 将文本写入剪贴板（异步），使用短退避重试。
@@ -64,17 +64,20 @@ namespace WinKit.Clipboard.Services
                         if (hGlobal == IntPtr.Zero)
                             return false;
                         IntPtr target = GlobalLock(hGlobal);
-                        if (target != IntPtr.Zero)
+                        if (target == IntPtr.Zero)
                         {
-                            // Copy the characters into the allocated memory
-                            var chars = text.ToCharArray();
-                            Marshal.Copy(chars, 0, target, chars.Length);
-                            // Null-terminate
-                            Marshal.WriteInt16(target, chars.Length * 2, 0);
-                            GlobalUnlock(hGlobal);
-                            SetClipboardData(CF_UNICODETEXT, hGlobal);
+                            GlobalFree(hGlobal);
+                            return false;
                         }
-                        OleFlushClipboard();
+                        var chars = text.ToCharArray();
+                        Marshal.Copy(chars, 0, target, chars.Length);
+                        Marshal.WriteInt16(target, chars.Length * 2, 0);
+                        GlobalUnlock(hGlobal);
+                        if (SetClipboardData(CF_UNICODETEXT, hGlobal) == IntPtr.Zero)
+                        {
+                            GlobalFree(hGlobal);
+                            return false;
+                        }
                         return true;
                     }
                     finally

@@ -4,14 +4,13 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Security.Cryptography;
-using System.Windows.Media.Imaging;
 using WinKit.Clipboard.Models;
 using WinKit.Common;
 
 namespace WinKit.Clipboard.Services
 {
     /// <summary>
-    /// 图片剪贴板处理服务：位图提取、5MB 大小限制、54px 缩略图生成、哈希计算与无锁加载
+    /// 图片剪贴板处理服务：位图提取、5MB 大小限制、54px 缩略图生成、哈希计算与文件清理
     /// </summary>
     public static class ImageProcessingService
     {
@@ -92,34 +91,6 @@ namespace WinKit.Clipboard.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"ImageProcessingService: 处理图片失败 ({ex.Message})");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// 以非锁定模式加载 BitmapImage（读取为内存流后断开文件句柄）
-        /// </summary>
-        public static BitmapImage? LoadBitmapWithoutLock(string? filePath)
-        {
-            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
-
-            try
-            {
-                byte[] bytes = File.ReadAllBytes(filePath);
-                using var ms = new MemoryStream(bytes);
-
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-                bitmap.StreamSource = ms;
-                bitmap.EndInit();
-                bitmap.Freeze(); // 允许跨线程访问
-                return bitmap;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"ImageProcessingService: 加载图片失败 {filePath} ({ex.Message})");
                 return null;
             }
         }
