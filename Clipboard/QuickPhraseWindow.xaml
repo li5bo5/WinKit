@@ -76,6 +76,7 @@
                         <Setter Property="BorderThickness" Value="0"/>
                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                         <EventSetter Event="PreviewMouseLeftButtonDown" Handler="ListBoxItem_PreviewMouseLeftButtonDown"/>
+                        <EventSetter Event="MouseMove" Handler="ListBoxItem_MouseMove"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
@@ -86,9 +87,6 @@
                                         <ContentPresenter/>
                                     </Border>
                                     <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="itemBd" Property="Background" Value="{DynamicResource ThemeItemHoverBrush}"/>
-                                        </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter TargetName="itemBd" Property="Background" Value="{DynamicResource ThemeItemSelectedBrush}"/>
                                         </Trigger>

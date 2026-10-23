@@ -295,6 +295,13 @@ namespace WinKit.Clipboard
                 ClipboardList.SelectedIndex = 0;
             }
 
+            // ④ 未开启记忆滚动时，复位到第一条
+            if (!_settingsManager.Settings.PasteRememberScrollPosition && ClipboardList.Items.Count > 0)
+                ClipboardList.ScrollIntoView(ClipboardList.Items[0]);
+
+            UpdateLayout();
+            _lastMouseMovePos = Mouse.GetPosition(this);
+
             Show();
             WindowState = WindowState.Normal;
 
@@ -305,10 +312,6 @@ namespace WinKit.Clipboard
             Activate();
             NativeMethods.ForceSetForegroundWindow(selfHwnd);
             SearchBox.Focus();
-
-            // ④ 未开启记忆滚动时，复位到第一条
-            if (!_settingsManager.Settings.PasteRememberScrollPosition && ClipboardList.Items.Count > 0)
-                ClipboardList.ScrollIntoView(ClipboardList.Items[0]);
 
             // ⑤ 启动外部鼠标点击监听
             RefreshMouseMonitor();
@@ -357,6 +360,19 @@ namespace WinKit.Clipboard
             _isPinned = false;
             UpdatePinButton();
             SetTitleButtonsOpacity(0);
+            if (!string.IsNullOrEmpty(SearchBox.Text))
+            {
+                SearchBox.Text = string.Empty;
+            }
+            if (ClipboardList.Items.Count > 0)
+            {
+                ClipboardList.SelectedIndex = 0;
+                if (!_settingsManager.Settings.PasteRememberScrollPosition)
+                {
+                    ClipboardList.ScrollIntoView(ClipboardList.Items[0]);
+                }
+            }
+            UpdateLayout();
             base.Hide();
             RefreshMouseMonitor();
         }
@@ -364,8 +380,23 @@ namespace WinKit.Clipboard
         public void CloseBtn_Click(object sender, RoutedEventArgs e) => Hide();
 
         // ══════════════════════════════════════════════
-        // 列表项单击 — 零延迟直接回填
+        // 列表项鼠标移动同步选中 & 单击零延迟直接回填
         // ══════════════════════════════════════════════
+        private WinPoint _lastMouseMovePos;
+
+        private void ListBoxItem_MouseMove(object sender, MouseEventArgs e)
+        {
+            var pos = e.GetPosition(this);
+            if (pos != _lastMouseMovePos)
+            {
+                _lastMouseMovePos = pos;
+                if (sender is ListBoxItem item && !item.IsSelected)
+                {
+                    item.IsSelected = true;
+                }
+            }
+        }
+
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             // 排除子按钮点击（预览、删除等）
@@ -517,7 +548,12 @@ namespace WinKit.Clipboard
         {
             if (sender is Button btn && btn.Tag is ClipboardItem item)
             {
+                int prevIdx = ClipboardList.SelectedIndex;
                 _clipboardManager.RemoveItem(item.Id);
+                if (ClipboardList.SelectedIndex < 0 && ClipboardList.Items.Count > 0)
+                {
+                    ClipboardList.SelectedIndex = Math.Min(Math.Max(0, prevIdx), ClipboardList.Items.Count - 1);
+                }
                 e.Handled = true;
             }
         }
