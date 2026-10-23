@@ -3,16 +3,43 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using WinKit.Clipboard.Services;
 
 namespace WinKit.Common
 {
     public partial class AboutWindow : Window
     {
+        private readonly GlobalMouseClickMonitor _mouseMonitor = new();
+
         public AboutWindow()
         {
             InitializeComponent();
             InitVersion();
+
+            _mouseMonitor.ClickedOutside += () => Dispatcher.BeginInvoke(() =>
+            {
+                if (IsVisible) Hide();
+            });
+
+            IsVisibleChanged += (s, e) =>
+            {
+                if ((bool)e.NewValue)
+                {
+                    var hwnd = new WindowInteropHelper(this).EnsureHandle();
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        _mouseMonitor.Start(new[] { hwnd });
+                    }
+                }
+                else
+                {
+                    _mouseMonitor.Stop();
+                }
+            };
+
+            Closed += (s, e) => _mouseMonitor.Dispose();
         }
 
         private void InitVersion()
@@ -32,7 +59,7 @@ namespace WinKit.Common
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             // 支持点击窗口任意空白区域进行拖动
-            if (e.LeftButton == MouseButtonState.Pressed) DragMove();
+            if (e.LeftButton == MouseButtonState.Pressed) NativeMethods.DragMoveWithBounds(this);
         }
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -43,11 +70,6 @@ namespace WinKit.Common
                 Hide();
                 e.Handled = true;
             }
-        }
-
-        private void Window_Deactivated(object sender, EventArgs e)
-        {
-            Hide();
         }
 
         private void LinkText_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)

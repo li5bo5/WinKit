@@ -19,6 +19,7 @@ namespace WinKit.Common
 
         public const uint SWP_NOSIZE = 0x0001;
         public const uint SWP_NOMOVE = 0x0002;
+        public const uint SWP_NOZORDER = 0x0004;
         public const uint SWP_NOACTIVATE = 0x0010;
         public const uint SWP_SHOWWINDOW = 0x0040;
         public const uint GA_ROOT = 2;
@@ -560,11 +561,14 @@ namespace WinKit.Common
 
         public static readonly int WM_TASKBARCREATED = RegisterWindowMessage("TaskbarCreated");
 
-        // ── 多屏钳制 / 桌面宿主 / 每显示器 DPI / 窗口缩放钳制 ────────────────
-        public const int WM_MOVING = 0x0216;
+        // ── 多屏拖拽边界 / 桌面宿主 / 每显示器 DPI / 窗口交互统一辅助 ────────
         private const int GWLP_HWNDPARENT = -8;
         private const uint MONITOR_DEFAULTTONEAREST = 2;
         private const int MDT_EFFECTIVE_DPI = 0;
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
         private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
@@ -579,32 +583,86 @@ namespace WinKit.Common
         private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
         /// <summary>
-        /// 处理 WM_MOVING：按光标所在屏幕的工作区钳制窗口矩形（物理像素），实现跨屏移动且不溢出屏幕
+        /// 统一窗口拖动与松手超界回弹（方案 A）：
+        /// 0. 拖动期间交由系统原生 DragMove 自由跟随，跨屏幕零跳变；
+        /// 1. 多屏幕交界边允许跨越显示与停留；
+        /// 2. 无相邻屏幕的上边缘不允许把顶部标题栏拖出屏幕顶边；
+        /// 3. 无相邻屏幕的下边缘留在屏幕内的高度不小于 2/5；
+        /// 4. 无相邻屏幕的左右边缘留在屏幕内的宽度不小于 1/5。
         /// </summary>
-        public static void ClampMovingRectToCursorScreen(IntPtr lParam)
+        public static void DragMoveWithBounds(System.Windows.Window window)
         {
-            var rect = Marshal.PtrToStructure<RECT>(lParam);
+            try
+            {
+                window.DragMove();
+            }
+            catch
+            {
+                return;
+            }
+
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out RECT rect)) return;
+
             int width  = rect.Right - rect.Left;
             int height = rect.Bottom - rect.Top;
+            if (width <= 0 || height <= 0) return;
 
-            GetCursorPos(out POINT cursor);
-            var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(cursor.X, cursor.Y)).WorkingArea;
+            var curScreen = GetCursorPos(out POINT cursor)
+                ? System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(cursor.X, cursor.Y))
+                : System.Windows.Forms.Screen.FromHandle(hwnd);
 
-            // 尺寸若超出工作区，先按工作区收窄
-            if (width  > area.Width)  width  = area.Width;
-            if (height > area.Height) height = area.Height;
+            var area   = curScreen.WorkingArea;
+            var bounds = curScreen.Bounds;
 
-            // 左右钳制
-            if (rect.Left < area.Left) rect.Left = area.Left;
-            if (rect.Left + width > area.Right) rect.Left = area.Right - width;
-            rect.Right = rect.Left + width;
+            int minAreaLeft   = area.Left;
+            int maxAreaRight  = area.Right;
+            int minAreaTop    = area.Top;
+            int maxAreaBottom = area.Bottom;
 
-            // 上下钳制
-            if (rect.Top < area.Top) rect.Top = area.Top;
-            if (rect.Top + height > area.Bottom) rect.Top = area.Bottom - height;
-            rect.Bottom = rect.Top + height;
+            // 检测当前屏幕四边是否存在相邻屏幕，若存在则延伸交界边允许自由跨越显示
+            foreach (var other in System.Windows.Forms.Screen.AllScreens)
+            {
+                if (other.DeviceName == curScreen.DeviceName) continue;
+                var ob = other.Bounds;
+                var oa = other.WorkingArea;
 
-            Marshal.StructureToPtr(rect, lParam, false);
+                // 垂直方向有重叠：检测左/右相邻屏幕
+                if (Math.Min(ob.Bottom, bounds.Bottom) > Math.Max(ob.Top, bounds.Top))
+                {
+                    if (ob.Left < bounds.Left && ob.Right >= bounds.Left - 4)
+                        minAreaLeft = Math.Min(minAreaLeft, oa.Left);
+                    if (ob.Right > bounds.Right && ob.Left <= bounds.Right + 4)
+                        maxAreaRight = Math.Max(maxAreaRight, oa.Right);
+                }
+
+                // 水平方向有重叠：检测上/下相邻屏幕
+                if (Math.Min(ob.Right, bounds.Right) > Math.Max(ob.Left, bounds.Left))
+                {
+                    if (ob.Top < bounds.Top && ob.Bottom >= bounds.Top - 4)
+                        minAreaTop = Math.Min(minAreaTop, oa.Top);
+                    if (ob.Bottom > bounds.Bottom && ob.Top <= bounds.Bottom + 4)
+                        maxAreaBottom = Math.Max(maxAreaBottom, oa.Bottom);
+                }
+            }
+
+            // 左右外边缘：最少保留 1/5 宽度
+            int minKeepW = Math.Max(1, width / 5);
+            int minLeft  = minAreaLeft - (width - minKeepW);
+            int maxLeft  = maxAreaRight - minKeepW;
+
+            // 上外边缘：不允许把顶部标题栏拖出屏幕顶边；下外边缘：最少保留 2/5 高度
+            int minKeepH = Math.Max(1, height * 2 / 5);
+            int minTop   = minAreaTop;
+            int maxTop   = maxAreaBottom - minKeepH;
+
+            int newLeft = minLeft <= maxLeft ? Math.Clamp(rect.Left, minLeft, maxLeft) : minLeft;
+            int newTop  = minTop  <= maxTop  ? Math.Clamp(rect.Top,  minTop,  maxTop)  : minTop;
+
+            if (newLeft != rect.Left || newTop != rect.Top)
+            {
+                SetWindowPos(hwnd, IntPtr.Zero, newLeft, newTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
         }
 
         /// <summary>
@@ -647,6 +705,115 @@ namespace WinKit.Common
 
             window.Width = newW;
             window.Height = newH;
+        }
+
+        /// <summary>
+        /// 为窗口右下角缩放手柄统一挂载拖拽缩放事件（消除各窗口重复的缩放状态字段与事件方法）
+        /// </summary>
+        public static void AttachResizeGrip(System.Windows.Window window, System.Windows.UIElement grip, Action? onResizeCompleted = null)
+        {
+            bool isResizing = false;
+            System.Windows.Point resizeStart = default;
+            double startW = 0, startH = 0;
+
+            System.Windows.Input.MouseEventHandler onMove = (_, e) =>
+            {
+                if (!isResizing) return;
+                ApplyResizeWithScreenClamp(window, startW, startH, e.GetPosition(null) - resizeStart);
+            };
+
+            System.Windows.Input.MouseButtonEventHandler? onUp = null;
+            onUp = (_, e) =>
+            {
+                if (!isResizing) return;
+                isResizing = false;
+                grip.ReleaseMouseCapture();
+                grip.MouseMove -= onMove;
+                grip.MouseLeftButtonUp -= onUp;
+                onResizeCompleted?.Invoke();
+            };
+
+            grip.MouseLeftButtonDown += (_, e) =>
+            {
+                isResizing = true;
+                resizeStart = e.GetPosition(null);
+                startW = window.Width;
+                startH = window.Height;
+                grip.CaptureMouse();
+                grip.MouseMove += onMove;
+                grip.MouseLeftButtonUp += onUp;
+                e.Handled = true;
+            };
+        }
+
+        /// <summary>
+        /// 按目标屏幕自身 DPI 计算不溢出工作区的物理坐标，并在执行 beforeShow 回调后置顶弹出窗口
+        /// </summary>
+        public static void ShowPopupAtPoint(System.Windows.Window window, IntPtr hwnd, int anchorX, int anchorY, int offsetLogical = 0, Action? beforeShow = null)
+        {
+            double scale = GetScaleForPoint(anchorX, anchorY);
+            var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(anchorX, anchorY)).WorkingArea;
+
+            double winW = window.Width > 0 ? window.Width : 300;
+            double winH = window.Height > 0 && !double.IsNaN(window.Height) ? window.Height : (window.ActualHeight > 0 ? window.ActualHeight : 200);
+            int physW  = (int)Math.Round(winW * scale);
+            int physH  = (int)Math.Round(winH * scale);
+            int offset = (int)Math.Round(offsetLogical * scale);
+            int pad    = (int)Math.Round(10 * scale);
+
+            int physLeft = anchorX + offset;
+            int physTop  = anchorY + offset;
+
+            if (physLeft + physW > area.Right)  physLeft = offset > 0 ? (anchorX - physW - offset) : (area.Right - physW - pad);
+            if (physLeft < area.Left)           physLeft = area.Left;
+            if (physTop  + physH > area.Bottom) physTop  = anchorY - physH - (offset > 0 ? offset : pad);
+            if (physTop  < area.Top)            physTop  = area.Top;
+
+            window.Left = physLeft / scale;
+            window.Top  = physTop  / scale;
+
+            beforeShow?.Invoke();
+
+            window.Show();
+            window.WindowState = System.Windows.WindowState.Normal;
+            SetWindowPos(hwnd, HWND_TOPMOST, physLeft, physTop, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
+        }
+
+        /// <summary>
+        /// 精准归还前台焦点至目标输入窗口并模拟 Ctrl+V 粘贴（确保不误贴进本进程自身窗口）
+        /// </summary>
+        public static async System.Threading.Tasks.Task RestoreFocusAndPasteAsync(IntPtr targetHwnd)
+        {
+            if (targetHwnd != IntPtr.Zero && IsWindow(targetHwnd))
+            {
+                ForceSetForegroundWindow(targetHwnd);
+                for (int wait = 0; wait < 8 && GetForegroundWindow() != targetHwnd; wait++)
+                {
+                    await System.Threading.Tasks.Task.Delay(25);
+                }
+                await System.Threading.Tasks.Task.Delay(30);
+            }
+
+            if (!IsOwnWindow(GetForegroundWindow()))
+            {
+                SimulateCtrlV();
+            }
+        }
+
+        /// <summary>
+        /// 当鼠标在列表项上发生真实物理位移时，同步将该项设为选中高亮（统一键盘、搜索与鼠标的单一高亮状态）
+        /// </summary>
+        public static void SelectListBoxItemOnMouseMove(System.Windows.Window window, object sender, System.Windows.Input.MouseEventArgs e, ref System.Windows.Point lastMouseMovePos)
+        {
+            var pos = e.GetPosition(window);
+            if (pos != lastMouseMovePos)
+            {
+                lastMouseMovePos = pos;
+                if (sender is System.Windows.Controls.ListBoxItem item && !item.IsSelected)
+                {
+                    item.IsSelected = true;
+                }
+            }
         }
     }
 }

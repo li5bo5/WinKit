@@ -30,8 +30,6 @@
         <SolidColorBrush x:Key="ThemeButtonHoverBrush" Color="#14000000"/>
         <SolidColorBrush x:Key="ThemeButtonPressedBrush" Color="#24000000"/>
         <SolidColorBrush x:Key="ThemeScrollBarThumbBrush" Color="#4D000000"/>
-        <SolidColorBrush x:Key="ThemeGlassDangerHoverBackgroundBrush" Color="#1AF44336"/>
-        <SolidColorBrush x:Key="ThemeGlassDangerHoverForegroundBrush" Color="#D32F2F"/>
         <SolidColorBrush x:Key="ThemeTopmostAccentLineBrush" Color="#2A75D3"/>
 
         <!-- ══════════════════════════════════════════════
@@ -274,43 +272,6 @@
                             </Trigger>
                             <Trigger Property="HasItems" Value="True">
                                 <Setter TargetName="RightArrow" Property="Visibility" Value="Visible"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- ══════════════════════════════════════════════
-             独立标题栏关闭按钮样式 (WinKitGlassCloseButton)
-        ══════════════════════════════════════════════ -->
-        <Style x:Key="WinKitGlassCloseButton" TargetType="Button">
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="IsTabStop" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Width" Value="26"/>
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius4}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeGlassDangerHoverBackgroundBrush}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource ThemeGlassDangerHoverForegroundBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ThemeButtonPressedBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

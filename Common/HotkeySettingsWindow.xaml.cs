@@ -399,7 +399,7 @@ namespace WinKit.Common
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 1) DragMove();
+            if (e.ClickCount == 1) NativeMethods.DragMoveWithBounds(this);
         }
 
         private void CloseBtn_Click(object sender, RoutedEventArgs e) => CancelAndClose();

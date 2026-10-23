@@ -30,7 +30,7 @@ namespace WinKit.Common
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             // 支持点击窗口任意空白区域拖动
-            if (e.LeftButton == MouseButtonState.Pressed) DragMove();
+            if (e.LeftButton == MouseButtonState.Pressed) NativeMethods.DragMoveWithBounds(this);
         }
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)

@@ -230,10 +230,6 @@ namespace WinKit.Common
             // 滚动条滑块
             res["ThemeScrollBarThumbBrush"]  = new SolidColorBrush(isDark ? Color.FromArgb(77, 255, 255, 255) : Color.FromArgb(77, 0, 0, 0));
 
-            // 关闭按钮红色高亮画刷
-            res["ThemeGlassDangerHoverBackgroundBrush"]  = new SolidColorBrush(isDark ? Color.FromArgb(51, 244, 67, 54) : Color.FromArgb(26, 244, 67, 54));
-            res["ThemeGlassDangerHoverForegroundBrush"]  = new SolidColorBrush(isDark ? Color.FromRgb(239, 83, 80) : Color.FromRgb(211, 47, 47));
-
             // 窗口置顶顶部微光线条画刷 (Topmost Accent Line)
             res["ThemeTopmostAccentLineBrush"]           = new SolidColorBrush(isDark ? Color.FromArgb(220, 96, 165, 250) : Color.FromArgb(200, 37, 99, 235));
         }
