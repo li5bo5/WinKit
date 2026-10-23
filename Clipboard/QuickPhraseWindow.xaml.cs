@@ -134,6 +134,8 @@ namespace WinKit.Clipboard
                 PhrasesList.SelectedIndex = 0;
             }
 
+            _lastMouseMovePos = Mouse.GetPosition(this);
+
             // 7. 显示并正常激活焦点
             Show();
             WindowState = WindowState.Normal;
@@ -145,6 +147,21 @@ namespace WinKit.Clipboard
 
             // 8. 启动鼠标外部监听
             _mouseMonitor.Start(new[] { selfHwnd });
+        }
+
+        private System.Windows.Point _lastMouseMovePos;
+
+        private void ListBoxItem_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            var pos = e.GetPosition(this);
+            if (pos != _lastMouseMovePos)
+            {
+                _lastMouseMovePos = pos;
+                if (sender is ListBoxItem item && !item.IsSelected)
+                {
+                    item.IsSelected = true;
+                }
+            }
         }
 
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
