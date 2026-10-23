@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -9,6 +9,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.ComponentModel;
+using System.Windows.Data;
 using WinKit.Clipboard.Models;
 using WinKit.Clipboard.Services;
 using WinKit.Common;
@@ -41,6 +43,9 @@ namespace WinKit.Clipboard
         private bool _isPinned = false;
         public  bool IsPinned  => _isPinned;
 
+        // ── 搜索过滤视图 ──────────────────────────────
+        private readonly ICollectionView _view;
+
         // ── Win32 P/Invoke ─────────────────────────────
         [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
@@ -63,6 +68,10 @@ namespace WinKit.Clipboard
             _settingsManager  = settingsManager;
 
             ClipboardList.ItemsSource = _clipboardManager.Items;
+
+            // 搜索过滤：作用于默认视图，不改动底层数据集合
+            _view = CollectionViewSource.GetDefaultView(_clipboardManager.Items);
+            _view.Filter = FilterItem;
 
             ((System.Collections.Specialized.INotifyCollectionChanged)_clipboardManager.Items)
                 .CollectionChanged += (s, e) => UpdateUIStates();
@@ -90,14 +99,27 @@ namespace WinKit.Clipboard
         }
 
         // ══════════════════════════════════════════════
-        // 初始化 — 设置 WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW
+        // 初始化 — 设置 WS_EX_TOOLWINDOW（不再使用 WS_EX_NOACTIVATE，以便搜索框获得键盘焦点）
         // ══════════════════════════════════════════════
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
             var hwnd    = new WindowInteropHelper(this).Handle;
             int exStyle = GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-            SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW);
+            SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_TOOLWINDOW);
+            HwndSource.FromHwnd(hwnd)?.AddHook(WndProc);
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // 按光标所在屏幕钳制窗口拖动（支持跨屏且不溢出屏幕）
+            if (msg == NativeMethods.WM_MOVING)
+            {
+                NativeMethods.ClampMovingRectToCursorScreen(lParam);
+                handled = true;
+                return new IntPtr(1);
+            }
+            return IntPtr.Zero;
         }
 
         // ══════════════════════════════════════════════
@@ -141,13 +163,94 @@ namespace WinKit.Clipboard
         private void PinBtn_Click(object sender, RoutedEventArgs e) => TogglePinState();
 
         // ══════════════════════════════════════════════
-        // Esc 退出
+        // Esc 退出（搜索框有内容时先清空，为空时隐藏窗口）
         // ══════════════════════════════════════════════
+        public void HandleEscape()
+        {
+            if (!string.IsNullOrEmpty(SearchBox.Text))
+            {
+                SearchBox.Text = string.Empty;
+                SearchBox.Focus();
+            }
+            else
+            {
+                Hide();
+            }
+        }
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
-                Hide();
+                HandleEscape();
+                e.Handled = true;
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // 搜索过滤与键盘交互
+        // ══════════════════════════════════════════════
+        private bool FilterItem(object obj)
+        {
+            string keyword = SearchBox?.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(keyword)) return true;
+
+            if (obj is ClipboardItem item)
+            {
+                // 关键词非空时不显示图片条目，仅不区分大小写匹配文本
+                if (item.IsImage) return false;
+                return !string.IsNullOrEmpty(item.Content) &&
+                       item.Content.Contains(keyword, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_view == null) return;
+            _view.Refresh();
+            if (ClipboardList.Items.Count > 0)
+            {
+                ClipboardList.SelectedIndex = 0;
+                ClipboardList.ScrollIntoView(ClipboardList.SelectedItem);
+            }
+        }
+
+        private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Down)
+            {
+                int count = ClipboardList.Items.Count;
+                if (count > 0)
+                {
+                    int next = ClipboardList.SelectedIndex + 1;
+                    ClipboardList.SelectedIndex = next < count ? next : 0;
+                    ClipboardList.ScrollIntoView(ClipboardList.SelectedItem);
+                }
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Up)
+            {
+                int count = ClipboardList.Items.Count;
+                if (count > 0)
+                {
+                    int prev = ClipboardList.SelectedIndex - 1;
+                    ClipboardList.SelectedIndex = prev >= 0 ? prev : count - 1;
+                    ClipboardList.ScrollIntoView(ClipboardList.SelectedItem);
+                }
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                if (ClipboardList.SelectedItem is ClipboardItem item)
+                {
+                    UseSelectedItem(item);
+                }
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                HandleEscape();
                 e.Handled = true;
             }
         }
@@ -167,54 +270,60 @@ namespace WinKit.Clipboard
         // ══════════════════════════════════════════════
         public void ShowAtMouse()
         {
-            // ① 呼出前立即记录当前前台窗口
+            // ① 呼出前立即记录当前前台窗口（排除本进程自身窗口）
             IntPtr fgWnd = GetForegroundWindow();
-            var selfHwnd = new WindowInteropHelper(this).Handle;
-            if (fgWnd != IntPtr.Zero && fgWnd != selfHwnd && IsWindow(fgWnd))
+            var selfHwnd = new WindowInteropHelper(this).EnsureHandle();
+            if (fgWnd != IntPtr.Zero && fgWnd != selfHwnd && !NativeMethods.IsOwnWindow(fgWnd) && IsWindow(fgWnd))
                 _lastTargetHwnd = fgWnd;
 
-            // ② 计算弹出位置
+            // ② 按目标屏幕自身 DPI 计算弹出物理坐标（解决多显示器不同缩放比例下的跨屏定位偏差）
             GetCursorPos(out POINT mousePos);
-            var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(mousePos.X, mousePos.Y));
-            var area   = screen.WorkingArea;
+            var screen   = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(mousePos.X, mousePos.Y));
+            var area     = screen.WorkingArea;
+            double scale = NativeMethods.GetScaleForPoint(mousePos.X, mousePos.Y);
 
-            var dpi        = System.Windows.Media.VisualTreeHelper.GetDpi(this);
-            double dpiX    = dpi.DpiScaleX;
-            double dpiY    = dpi.DpiScaleY;
+            int winW   = (int)Math.Round(Width  * scale);
+            int winH   = (int)Math.Round(Height * scale);
+            int offset = (int)Math.Round(10     * scale);
 
-            double mouseX  = mousePos.X / dpiX;
-            double mouseY  = mousePos.Y / dpiY;
-            double workL   = area.Left   / dpiX;
-            double workT   = area.Top    / dpiY;
-            double workR   = area.Right  / dpiX;
-            double workB   = area.Bottom / dpiY;
+            int physLeft = mousePos.X + offset;
+            int physTop  = mousePos.Y + offset;
 
-            double left = mouseX + 10;
-            double top  = mouseY + 10;
+            if (physLeft + winW > area.Right)  physLeft = mousePos.X - winW - offset;
+            if (physLeft        < area.Left)   physLeft = area.Left;
+            if (physTop  + winH > area.Bottom) physTop  = mousePos.Y - winH - offset;
+            if (physTop         < area.Top)    physTop  = area.Top;
 
-            if (left + Width  > workR) left = mouseX - Width  - 10;
-            if (left          < workL) left = workL;
-            if (top  + Height > workB) top  = mouseY - Height - 10;
-            if (top           < workT) top  = workT;
+            Left = physLeft / scale;
+            Top  = physTop  / scale;
 
-            Left = left;
-            Top  = top;
-
-            // ③ 显示窗口并强制置于最顶层（默认未固定，单次呼出临时置顶生效）
+            // ③ 清空上次搜索词并重置状态
             _isPinned = false;
             UpdatePinButton();
             SetTitleButtonsOpacity(0);
+            if (!string.IsNullOrEmpty(SearchBox.Text))
+            {
+                SearchBox.Text = string.Empty;
+            }
+            if (ClipboardList.Items.Count > 0)
+            {
+                ClipboardList.SelectedIndex = 0;
+            }
 
             Show();
             WindowState = WindowState.Normal;
 
-            var hwnd = new WindowInteropHelper(this).Handle;
-            SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
-                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+            // 使用物理像素直接定位并置顶，避免跨 DPI 屏幕时的逻辑坐标换算漂移
+            SetWindowPos(selfHwnd, NativeMethods.HWND_TOPMOST, physLeft, physTop, 0, 0,
+                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW);
+
+            Activate();
+            NativeMethods.ForceSetForegroundWindow(selfHwnd);
+            SearchBox.Focus();
 
             // ④ 未开启记忆滚动时，复位到第一条
-            if (!_settingsManager.Settings.PasteRememberScrollPosition && _clipboardManager.Items.Count > 0)
-                ClipboardList.ScrollIntoView(_clipboardManager.Items.FirstOrDefault());
+            if (!_settingsManager.Settings.PasteRememberScrollPosition && ClipboardList.Items.Count > 0)
+                ClipboardList.ScrollIntoView(ClipboardList.Items[0]);
 
             // ⑤ 启动外部鼠标点击监听
             RefreshMouseMonitor();

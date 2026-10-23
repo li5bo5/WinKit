@@ -268,6 +268,8 @@ namespace WinKit.Todo
                 extendedStyle |= WS_EX_TRANSPARENT;
             }
             SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle);
+            // 所有者绑定桌面 Progman：非置顶时 Win+D 随桌面一同显示
+            NativeMethods.BindOwnerToProgman(hwnd);
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -322,55 +324,13 @@ namespace WinKit.Todo
             if (msg == NativeMethods.WM_TASKBARCREATED)
             {
                 _tray?.EnsureVisible();
+                NativeMethods.BindOwnerToProgman(hwnd);
             }
 
-            // 3. 限制窗口拖动在当前屏幕工作区内
+            // 3. 按光标所在屏幕钳制窗口拖动（支持跨屏且不溢出屏幕）
             if (msg == WM_MOVING)
             {
-                var rect = (RECT)Marshal.PtrToStructure(lParam, typeof(RECT))!;
-                int width = rect.Right - rect.Left;
-                int height = rect.Bottom - rect.Top;
-
-                // 按窗口中心点探测所在的屏幕工作区（物理像素）
-                var centerPoint = new System.Drawing.Point(rect.Left + width / 2, rect.Top + height / 2);
-                var screen = System.Windows.Forms.Screen.FromPoint(centerPoint);
-                var area = screen.WorkingArea;
-
-                // 尺寸若超出工作区，先按工作区收窄
-                if (width > area.Width)
-                {
-                    width = area.Width;
-                }
-                if (height > area.Height)
-                {
-                    height = area.Height;
-                }
-
-                // 左右独立双向钳制
-                if (rect.Left < area.Left)
-                {
-                    rect.Left = area.Left;
-                    rect.Right = rect.Left + width;
-                }
-                if (rect.Right > area.Right)
-                {
-                    rect.Right = area.Right;
-                    rect.Left = rect.Right - width;
-                }
-
-                // 上下独立双向钳制
-                if (rect.Top < area.Top)
-                {
-                    rect.Top = area.Top;
-                    rect.Bottom = rect.Top + height;
-                }
-                if (rect.Bottom > area.Bottom)
-                {
-                    rect.Bottom = area.Bottom;
-                    rect.Top = rect.Bottom - height;
-                }
-
-                Marshal.StructureToPtr(rect, lParam, true);
+                NativeMethods.ClampMovingRectToCursorScreen(lParam);
                 handled = true;
                 return new IntPtr(1);
             }
