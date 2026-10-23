@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -164,7 +164,7 @@ namespace WinKit
                 }
                 if (_pasteWindow != null && _pasteWindow.IsVisible)
                 {
-                    Dispatcher.BeginInvoke(() => _pasteWindow.Hide());
+                    Dispatcher.BeginInvoke(() => _pasteWindow.HandleEscape());
                     return true;
                 }
                 return false; // 放行 Esc 给前台活动窗口

@@ -667,6 +667,74 @@ namespace WinKit.Common
         public static readonly int WM_SHOW_EXISTING_INSTANCE = RegisterWindowMessage("WinKit_ActivateExistingInstance_li5bo5");
         public static readonly int WM_TASKBARCREATED = RegisterWindowMessage("TaskbarCreated");
 
+        // ── 多屏钳制 / 桌面宿主 / 每显示器 DPI ─────────────────────────
+        public const int WM_MOVING = 0x0216;
+        private const int GWLP_HWNDPARENT = -8;
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+        private const int MDT_EFFECTIVE_DPI = 0;
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+        /// <summary>
+        /// 处理 WM_MOVING：按光标所在屏幕的工作区钳制窗口矩形（物理像素），实现跨屏移动且不溢出屏幕
+        /// </summary>
+        public static void ClampMovingRectToCursorScreen(IntPtr lParam)
+        {
+            var rect = Marshal.PtrToStructure<RECT>(lParam);
+            int width  = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+
+            GetCursorPos(out POINT cursor);
+            var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(cursor.X, cursor.Y)).WorkingArea;
+
+            // 尺寸若超出工作区，先按工作区收窄
+            if (width  > area.Width)  width  = area.Width;
+            if (height > area.Height) height = area.Height;
+
+            // 左右钳制
+            if (rect.Left < area.Left) rect.Left = area.Left;
+            if (rect.Left + width > area.Right) rect.Left = area.Right - width;
+            rect.Right = rect.Left + width;
+
+            // 上下钳制
+            if (rect.Top < area.Top) rect.Top = area.Top;
+            if (rect.Top + height > area.Bottom) rect.Top = area.Bottom - height;
+            rect.Bottom = rect.Top + height;
+
+            Marshal.StructureToPtr(rect, lParam, false);
+        }
+
+        /// <summary>
+        /// 将窗口所有者绑定为桌面 Progman，使非置顶窗口在 Win+D 时随桌面一同显示
+        /// </summary>
+        public static void BindOwnerToProgman(IntPtr hwnd)
+        {
+            IntPtr progman = FindWindow("Progman", null);
+            if (hwnd != IntPtr.Zero && progman != IntPtr.Zero)
+                SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, progman);
+        }
+
+        /// <summary>
+        /// 获取指定屏幕坐标所在显示器的 DPI 缩放比例（1.0 = 96 DPI）
+        /// </summary>
+        public static double GetScaleForPoint(int x, int y)
+        {
+            IntPtr monitor = MonitorFromPoint(new POINT { X = x, Y = y }, MONITOR_DEFAULTTONEAREST);
+            if (GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, out uint dpiX, out _) == 0 && dpiX > 0)
+                return dpiX / 96.0;
+            return 1.0;
+        }
+
         public static void BringExistingInstanceToFront()
         {
             PostMessage((IntPtr)HWND_BROADCAST, WM_SHOW_EXISTING_INSTANCE, IntPtr.Zero, IntPtr.Zero);

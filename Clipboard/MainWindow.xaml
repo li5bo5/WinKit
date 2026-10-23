@@ -1,4 +1,4 @@
-<Window x:Class="WinKit.Clipboard.MainWindow"
+﻿<Window x:Class="WinKit.Clipboard.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:WinKit.Clipboard.Models"
@@ -42,15 +42,39 @@
                   MouseLeave="TitleBar_MouseLeave"
                   Background="Transparent">
 
-                <TextBlock Text="剪贴板"
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="剪贴板"
                            VerticalAlignment="Center"
                            Margin="16,0"
                            FontSize="13.5"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
 
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Right"
+                <!-- 搜索框：固定 9 个字宽度（116px），左右内边距 3，相对整个窗口水平居中 -->
+                <TextBox x:Name="SearchBox"
+                         Grid.Column="0"
+                         Grid.ColumnSpan="3"
+                         Width="116"
+                         Height="24"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Style="{StaticResource InlineTextBox}"
+                         AcceptsReturn="False"
+                         TextWrapping="NoWrap"
+                         MaxLength="9"
+                         Padding="3,0"
+                         FontSize="11.5"
+                         TextChanged="SearchBox_TextChanged"
+                         PreviewKeyDown="SearchBox_PreviewKeyDown"/>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
                             Margin="0,0,8,0">
                     <Button x:Name="PinBtn"
                             Content="📌"
