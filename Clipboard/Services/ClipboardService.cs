@@ -216,42 +216,53 @@ namespace WinKit.Clipboard.Services
 
         private void TryCaptureText(uint currentSeq)
         {
-            if (System.Windows.Forms.Clipboard.ContainsText())
+            // 非文本内容（如复制的文件）：标记本序列号已处理，避免每个轮询周期重复读取剪贴板
+            if (!System.Windows.Forms.Clipboard.ContainsText())
             {
-                string text = string.Empty;
-                try
-                {
-                    text = System.Windows.Forms.Clipboard.GetText();
-                }
-                catch { }
-
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    string normalizedText = text.Replace("\r\n", "\n").Trim();
-                    // 检查是否为即将发生的自回填文本（兼顾原始文本与换行归一化比对）
-                    if (_upcomingSelfPastes.ContainsKey(text) ||
-                        _upcomingSelfPastes.ContainsKey(normalizedText) ||
-                        text == _lastTextContent ||
-                        normalizedText == _lastTextContent?.Replace("\r\n", "\n").Trim())
-                    {
-                        _lastHandledSequence = currentSeq;
-                        return;
-                    }
-
-                    _lastTextContent = text;
-                    _lastHandledSequence = currentSeq;
-
-                    var textItem = new ClipboardItem
-                    {
-                        Id = Guid.NewGuid(),
-                        Type = ClipboardItemType.Text,
-                        ContentType = "Text",
-                        Content = text,
-                        CreatedAt = DateTimeOffset.Now
-                    };
-                    ItemDetected?.Invoke(this, textItem);
-                }
+                _lastHandledSequence = currentSeq;
+                return;
             }
+
+            string text;
+            try
+            {
+                text = System.Windows.Forms.Clipboard.GetText();
+            }
+            catch
+            {
+                return; // 剪贴板被其他进程占用：保留旧序列号，下一拍重试
+            }
+
+            // 纯空白文本：同样标记已处理
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                _lastHandledSequence = currentSeq;
+                return;
+            }
+
+            string normalizedText = text.Replace("\r\n", "\n").Trim();
+            // 检查是否为即将发生的自回填文本（兼顾原始文本与换行归一化比对）
+            if (_upcomingSelfPastes.ContainsKey(text) ||
+                _upcomingSelfPastes.ContainsKey(normalizedText) ||
+                text == _lastTextContent ||
+                normalizedText == _lastTextContent?.Replace("\r\n", "\n").Trim())
+            {
+                _lastHandledSequence = currentSeq;
+                return;
+            }
+
+            _lastTextContent = text;
+            _lastHandledSequence = currentSeq;
+
+            var textItem = new ClipboardItem
+            {
+                Id = Guid.NewGuid(),
+                Type = ClipboardItemType.Text,
+                ContentType = "Text",
+                Content = text,
+                CreatedAt = DateTimeOffset.Now
+            };
+            ItemDetected?.Invoke(this, textItem);
         }
 
         public void Dispose()

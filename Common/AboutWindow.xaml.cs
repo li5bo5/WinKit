@@ -18,24 +18,14 @@ namespace WinKit.Common
             InitializeComponent();
             InitVersion();
 
-            _mouseMonitor.ClickedOutside += () => Dispatcher.BeginInvoke(() =>
-            {
-                if (IsVisible) Hide();
-            });
+            _mouseMonitor.ClickedOutside += () => Dispatcher.BeginInvoke(Close);
 
-            IsVisibleChanged += (s, e) =>
+            Loaded += (s, e) =>
             {
-                if ((bool)e.NewValue)
+                var hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
                 {
-                    var hwnd = new WindowInteropHelper(this).EnsureHandle();
-                    if (hwnd != IntPtr.Zero)
-                    {
-                        _mouseMonitor.Start(new[] { hwnd });
-                    }
-                }
-                else
-                {
-                    _mouseMonitor.Stop();
+                    _mouseMonitor.Start(new[] { hwnd });
                 }
             };
 
@@ -64,10 +54,10 @@ namespace WinKit.Common
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            // 监听 Esc 键，按下时隐藏窗口
+            // 监听 Esc 键，按下时关闭销毁窗口
             if (e.Key == System.Windows.Input.Key.Escape)
             {
-                Hide();
+                Close();
                 e.Handled = true;
             }
         }
@@ -97,17 +87,6 @@ namespace WinKit.Common
             {
                 System.Windows.MessageBox.Show($"无法打开链接: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
-        {
-            if (App.IsExiting)
-            {
-                base.OnClosing(e);
-                return;
-            }
-            e.Cancel = true;
-            Hide();
         }
     }
 }

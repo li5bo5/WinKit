@@ -186,7 +186,7 @@
                                         </StackPanel.Style>
 
                                         <Border CornerRadius="4" ClipToBounds="True" Background="#15000000" Margin="0,0,8,0">
-                                            <Image Source="{Binding ThumbnailPath}"
+                                            <Image Source="{Binding ThumbnailSource}"
                                                    Height="54"
                                                    MaxWidth="140"
                                                    Stretch="Uniform"
