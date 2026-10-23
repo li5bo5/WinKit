@@ -16,8 +16,7 @@
         WindowStartupLocation="CenterScreen">
 
     <!-- 窗口主容器 -->
-    <Border Style="{StaticResource FluentWindowBorder}"
-            MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+    <Border Style="{StaticResource FluentWindowBorder}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="40"/>
@@ -28,6 +27,7 @@
 
             <!-- 1. 标题栏 -->
             <Grid Grid.Row="0" x:Name="TitleBar"
+                  MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
                   MouseEnter="TitleBar_MouseEnter"
                   MouseLeave="TitleBar_MouseLeave"
                   Background="Transparent">

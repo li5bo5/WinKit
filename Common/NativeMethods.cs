@@ -651,12 +651,23 @@ namespace WinKit.Common
             int minLeft  = minAreaLeft - (width - minKeepW);
             int maxLeft  = maxAreaRight - minKeepW;
 
+            int newLeft = minLeft <= maxLeft ? Math.Clamp(rect.Left, minLeft, maxLeft) : minLeft;
+
             // 上外边缘：不允许把顶部标题栏拖出屏幕顶边；下外边缘：最少保留 2/5 高度
             int minKeepH = Math.Max(1, height * 2 / 5);
             int minTop   = minAreaTop;
             int maxTop   = maxAreaBottom - minKeepH;
 
-            int newLeft = minLeft <= maxLeft ? Math.Clamp(rect.Left, minLeft, maxLeft) : minLeft;
+            // 上下错位多屏：窗口水平中心所在列若顶边更低（上方无屏幕），标题栏主体也不得越过该列顶边
+            int centerX = newLeft + width / 2;
+            int columnTop = int.MaxValue;
+            foreach (var s in System.Windows.Forms.Screen.AllScreens)
+            {
+                if (centerX >= s.Bounds.Left && centerX < s.Bounds.Right)
+                    columnTop = Math.Min(columnTop, s.WorkingArea.Top);
+            }
+            if (columnTop != int.MaxValue) minTop = Math.Max(minTop, columnTop);
+
             int newTop  = minTop  <= maxTop  ? Math.Clamp(rect.Top,  minTop,  maxTop)  : minTop;
 
             if (newLeft != rect.Left || newTop != rect.Top)
@@ -695,13 +706,17 @@ namespace WinKit.Common
             double newH = Math.Max(window.MinHeight, startH + delta.Y);
 
             var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
-            var area = System.Windows.Forms.Screen.FromHandle(hwnd).WorkingArea;
-            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(window);
-            double right = area.Right / (dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0);
-            double bottom = area.Bottom / (dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0);
+            if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out RECT rect))
+            {
+                // 统一在物理像素坐标系下计算窗口左上角到工作区右/下边界的距离，再按窗口自身 DPI 换算为逻辑尺寸上限
+                var area = System.Windows.Forms.Screen.FromHandle(hwnd).WorkingArea;
+                var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(window);
+                double maxW = (area.Right - rect.Left) / (dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0);
+                double maxH = (area.Bottom - rect.Top) / (dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0);
 
-            if (window.Left + newW > right) newW = Math.Max(window.MinWidth, right - window.Left);
-            if (window.Top + newH > bottom) newH = Math.Max(window.MinHeight, bottom - window.Top);
+                if (newW > maxW) newW = Math.Max(window.MinWidth, maxW);
+                if (newH > maxH) newH = Math.Max(window.MinHeight, maxH);
+            }
 
             window.Width = newW;
             window.Height = newH;
@@ -755,7 +770,17 @@ namespace WinKit.Common
             var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(anchorX, anchorY)).WorkingArea;
 
             double winW = window.Width > 0 ? window.Width : 300;
-            double winH = window.Height > 0 && !double.IsNaN(window.Height) ? window.Height : (window.ActualHeight > 0 ? window.ActualHeight : 200);
+            double winH;
+            if (window.Height > 0 && !double.IsNaN(window.Height))
+            {
+                winH = window.Height;
+            }
+            else
+            {
+                // SizeToContent 窗口：按当前内容实测高度（受 MaxHeight 约束），避免首次弹出时 ActualHeight 为 0 导致底部溢出
+                window.Measure(new System.Windows.Size(winW, double.PositiveInfinity));
+                winH = window.DesiredSize.Height > 0 ? window.DesiredSize.Height : (window.ActualHeight > 0 ? window.ActualHeight : 200);
+            }
             int physW  = (int)Math.Round(winW * scale);
             int physH  = (int)Math.Round(winH * scale);
             int offset = (int)Math.Round(offsetLogical * scale);

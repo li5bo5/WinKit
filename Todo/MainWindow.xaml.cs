@@ -569,15 +569,11 @@ namespace WinKit.Todo
             var hwnd = new WindowInteropHelper(this).Handle;
             bool isUncovered = false;
 
-            if (IsVisible && hwnd != IntPtr.Zero)
+            if (IsVisible && hwnd != IntPtr.Zero && NativeMethods.GetWindowRect(hwnd, out var rect))
             {
-                // 获取当前待办窗口区域的物理中心点（兼容高 DPI 缩放）
-                var source = PresentationSource.FromVisual(this);
-                double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
-                double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
-
-                int centerX = (int)((Left + Width / 2) * dpiX);
-                int centerY = (int)((Top + Height / 2) * dpiY);
+                // 直接从窗口真实物理矩形取中心点（兼容多显示器异构 DPI 缩放）
+                int centerX = (rect.Left + rect.Right) / 2;
+                int centerY = (rect.Top + rect.Bottom) / 2;
 
                 // 探测物理屏幕上覆盖在此坐标最上层的顶层窗口
                 IntPtr hitWnd = NativeMethods.WindowFromPoint(new NativeMethods.POINT { X = centerX, Y = centerY });
@@ -670,13 +666,6 @@ namespace WinKit.Todo
                 TodoList.ScrollIntoView(_items[^1]);
         }
 
-        private HistoryWindow? _historyWindow;
-
-        public void SetHistoryWindow(HistoryWindow historyWindow)
-        {
-            _historyWindow = historyWindow;
-        }
-
         public void DeleteTodoItem(TodoItem item)
         {
             if (item == null) return;
@@ -684,14 +673,6 @@ namespace WinKit.Todo
             _items.Remove(item);
             _todoService.SaveTodos(_items);
             _todoService.Flush();
-
-            _historyWindow?.Dispatcher.Invoke(() =>
-            {
-                if (_historyWindow.IsVisible)
-                {
-                    _historyWindow.ReloadRecycleBin();
-                }
-            });
         }
 
         private void ShowEditDialog(TodoItem item)

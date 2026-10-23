@@ -96,7 +96,7 @@ namespace WinKit.Clipboard.Services
                 new() { Content = "感谢您的反馈与支持。" }
             };
 
-            var storage = new JsonLinesStorage<QuickPhraseItem>(AppPaths.Phrases);
+            using var storage = new JsonLinesStorage<QuickPhraseItem>(AppPaths.Phrases);
             storage.Save(defaults);
         }
     }

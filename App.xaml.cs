@@ -72,7 +72,8 @@ namespace WinKit
             // 3. 初始化独立图片缓存清理服务
             _imageCleanupService = new ImageCleanupService(
                 _settingsManager,
-                () => _clipboardManager.Items.ToList(),
+                // 后台清理线程经 UI 线程获取集合快照，避免与 UI 线程增删条目并发枚举
+                () => Dispatcher.Invoke(() => _clipboardManager.Items.ToList()),
                 itemsToRemove => Dispatcher.BeginInvoke(() => _clipboardManager.RemoveItems(itemsToRemove))
             );
 

@@ -21,6 +21,7 @@ namespace WinKit.Common
         // 当前正在捕获按键的输入框
         private WpfTextBox? _capturingBox = null;
         private bool _isInitializing = false;
+        private bool _isSaved = false;
 
         // 用于通知 App 重新加载快捷键与配置的回调
         public event Action? HotkeysChanged;
@@ -34,13 +35,6 @@ namespace WinKit.Common
             _settingsManager = settingsManager;
 
             LoadFromSettings();
-            IsVisibleChanged += (s, e) =>
-            {
-                if (IsVisible)
-                {
-                    LoadFromSettings();
-                }
-            };
         }
 
         // ══════════════════════════════════════════════
@@ -325,8 +319,9 @@ namespace WinKit.Common
             _settingsManager.SaveSettings(settings);
             ThemeManager.ApplyTheme(); // 确认持久化应用主题
 
+            _isSaved = true;
             HotkeysChanged?.Invoke();
-            Hide();
+            Close();
         }
 
         // ══════════════════════════════════════════════
@@ -389,9 +384,7 @@ namespace WinKit.Common
 
         private void CancelAndClose()
         {
-            // 恢复已保存的配置主题（取消未保存的临时预览）
-            ThemeManager.ApplyTheme();
-            Hide();
+            Close();
         }
 
         private void TitleBar_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e) => CloseBtn.Opacity = 1;
@@ -404,15 +397,19 @@ namespace WinKit.Common
 
         private void CloseBtn_Click(object sender, RoutedEventArgs e) => CancelAndClose();
 
-        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        protected override void OnClosed(EventArgs e)
         {
-            if (App.IsExiting)
+            if (_capturingBox != null)
             {
-                base.OnClosing(e);
-                return;
+                _capturingBox = null;
+                SetHookCapturing(false);
             }
-            e.Cancel = true;
-            CancelAndClose();
+            if (!_isSaved)
+            {
+                // 恢复已保存的配置主题（取消未保存的临时预览）
+                ThemeManager.ApplyTheme();
+            }
+            base.OnClosed(e);
         }
     }
 }

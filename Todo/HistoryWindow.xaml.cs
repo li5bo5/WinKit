@@ -21,13 +21,7 @@ namespace WinKit.Todo
             InitializeComponent();
             _todoWindow = todoWindow;
             _recycleBinService = todoWindow.RecycleBinService;
-            _recycleBinService.ItemsChanged += (s, e) =>
-            {
-                if (IsVisible)
-                {
-                    ReloadRecycleBin();
-                }
-            };
+            _recycleBinService.ItemsChanged += OnRecycleBinItemsChanged;
 
             HistoryList.ItemsSource = _items;
             _items.CollectionChanged += (s, e) => UpdateUIStates();
@@ -35,6 +29,11 @@ namespace WinKit.Todo
             NativeMethods.AttachResizeGrip(this, ResizeGripArea);
 
             Loaded += (s, e) => ReloadRecycleBin();
+        }
+
+        private void OnRecycleBinItemsChanged(object? sender, EventArgs e)
+        {
+            ReloadRecycleBin();
         }
 
         public void ReloadRecycleBin()
@@ -63,14 +62,14 @@ namespace WinKit.Todo
 
         private void CloseBtn_Click(object sender, RoutedEventArgs e)
         {
-            Hide();
+            Close();
         }
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
-                Hide();
+                Close();
                 e.Handled = true;
             }
         }
@@ -113,15 +112,10 @@ namespace WinKit.Todo
             }
         }
 
-        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        protected override void OnClosed(EventArgs e)
         {
-            if (App.IsExiting)
-            {
-                base.OnClosing(e);
-                return;
-            }
-            e.Cancel = true;
-            Hide();
+            _recycleBinService.ItemsChanged -= OnRecycleBinItemsChanged;
+            base.OnClosed(e);
         }
     }
 }

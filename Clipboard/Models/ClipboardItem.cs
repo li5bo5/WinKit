@@ -83,6 +83,36 @@ namespace WinKit.Clipboard.Models
         public bool IsImage => Type == ClipboardItemType.Image;
         public bool IsText => Type == ClipboardItemType.Text;
 
+        private System.Windows.Media.Imaging.BitmapImage? _thumbnailSourceCached;
+        /// <summary>
+        /// 内存加载的缩略图图像源（BitmapCacheOption.OnLoad 立即释放磁盘文件锁，避免删除图片时 _thumb.png 被占用）
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Windows.Media.Imaging.BitmapImage? ThumbnailSource
+        {
+            get
+            {
+                if (_thumbnailSourceCached != null) return _thumbnailSourceCached;
+                if (!IsImage || string.IsNullOrEmpty(ThumbnailPath) || !System.IO.File.Exists(ThumbnailPath))
+                    return null;
+                try
+                {
+                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bmp.UriSource = new Uri(ThumbnailPath, UriKind.Absolute);
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    _thumbnailSourceCached = bmp;
+                    return _thumbnailSourceCached;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+        }
+
         private string? _displayTextCached;
         /// <summary>
         /// 格式化显示文本（带只读缓存，优化长文本列表滚动性能）

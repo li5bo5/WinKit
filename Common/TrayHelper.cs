@@ -41,10 +41,11 @@ namespace WinKit.Common
         private readonly ContextMenu _contextMenu;
         private readonly MenuHostWindow _menuHostWindow;
 
-        // 统一弹窗实例
-        private readonly AboutWindow _aboutWindow;
-        private readonly Todo.HistoryWindow _historyWindow;
-        private readonly HotkeySettingsWindow _preferencesWindow;
+        // 按需创建的弹窗实例（关闭即 Close 销毁）
+        private AboutWindow? _aboutWindow;
+        private Todo.HistoryWindow? _historyWindow;
+        private HotkeySettingsWindow? _preferencesWindow;
+        private Action? _hotkeysChangedHandler;
 
         // 纯文字极简菜单项
         private readonly MenuItem _itemHistory;
@@ -59,33 +60,8 @@ namespace WinKit.Common
             _todoWindow = todoWindow;
             _pasteWindow = pasteWindow;
 
-            // ── 1. 预创建弹窗实例（静默待命，避免启动期伪显示/隐藏扰动窗口树）─────────
+            // ── 1. 创建托盘菜单隐形宿主窗口 ─────────────────────────────
             _menuHostWindow = new MenuHostWindow();
-            _aboutWindow = new AboutWindow();
-
-            _historyWindow = new Todo.HistoryWindow((Todo.MainWindow)_todoWindow, _settingsManager);
-            ((Todo.MainWindow)_todoWindow).SetHistoryWindow(_historyWindow);
-
-            _preferencesWindow = new HotkeySettingsWindow(_settingsManager);
-            _preferencesWindow.IsVisibleChanged += (s, e) =>
-            {
-                if (_todoWindow is Todo.MainWindow todoWin)
-                {
-                    todoWin.IsPreferencesWindowOpen = _preferencesWindow.IsVisible;
-                }
-            };
-            _preferencesWindow.ResetTodoBoundsRequested += () =>
-            {
-                if (_todoWindow is Todo.MainWindow todoWin)
-                {
-                    todoWin.ResetToDefaultPosition(true);
-                    if (!todoWin.IsVisible)
-                    {
-                        todoWin.Show();
-                    }
-                    todoWin.Activate();
-                }
-            };
 
             // ── 2. 创建极简 4 项 WPF ContextMenu ──────────────────────
             _contextMenu = new ContextMenu();
@@ -192,7 +168,7 @@ namespace WinKit.Common
 
         public void SubscribeHotkeysChanged(Action handler)
         {
-            _preferencesWindow.HotkeysChanged += handler;
+            _hotkeysChangedHandler += handler;
         }
 
         public void ShowPreferencesWindow()
@@ -204,10 +180,36 @@ namespace WinKit.Common
                     todoWin.IsPreferencesWindowOpen = true;
                     todoWin.HideInlineInput();
                 }
-            });
 
-            _preferencesWindow.Dispatcher.Invoke(() =>
-            {
+                if (_preferencesWindow == null)
+                {
+                    _preferencesWindow = new HotkeySettingsWindow(_settingsManager);
+                    if (_hotkeysChangedHandler != null)
+                    {
+                        _preferencesWindow.HotkeysChanged += _hotkeysChangedHandler;
+                    }
+                    _preferencesWindow.ResetTodoBoundsRequested += () =>
+                    {
+                        if (_todoWindow is Todo.MainWindow tw)
+                        {
+                            tw.ResetToDefaultPosition(true);
+                            if (!tw.IsVisible)
+                            {
+                                tw.Show();
+                            }
+                            tw.Activate();
+                        }
+                    };
+                    _preferencesWindow.Closed += (s, e) =>
+                    {
+                        if (_todoWindow is Todo.MainWindow tw)
+                        {
+                            tw.IsPreferencesWindowOpen = false;
+                        }
+                        _preferencesWindow = null;
+                    };
+                }
+
                 _preferencesWindow.Show();
                 _preferencesWindow.Activate();
             });
@@ -215,9 +217,14 @@ namespace WinKit.Common
 
         public void ShowHistoryWindow()
         {
-            _historyWindow.Dispatcher.Invoke(() =>
+            _todoWindow.Dispatcher.Invoke(() =>
             {
-                _historyWindow.ReloadRecycleBin();
+                if (_historyWindow == null)
+                {
+                    _historyWindow = new Todo.HistoryWindow((Todo.MainWindow)_todoWindow, _settingsManager);
+                    _historyWindow.Closed += (s, e) => _historyWindow = null;
+                }
+
                 _historyWindow.Show();
                 _historyWindow.Activate();
             });
@@ -225,8 +232,14 @@ namespace WinKit.Common
 
         public void ShowAboutWindow()
         {
-            _aboutWindow.Dispatcher.Invoke(() =>
+            _todoWindow.Dispatcher.Invoke(() =>
             {
+                if (_aboutWindow == null)
+                {
+                    _aboutWindow = new AboutWindow();
+                    _aboutWindow.Closed += (s, e) => _aboutWindow = null;
+                }
+
                 _aboutWindow.Show();
                 _aboutWindow.Activate();
             });
@@ -237,9 +250,9 @@ namespace WinKit.Common
             _icon.Visible = false;
             _todoWindow.Dispatcher.Invoke(() => _todoWindow.Close());
             _pasteWindow.Dispatcher.Invoke(() => _pasteWindow.Close());
-            _aboutWindow.Dispatcher.Invoke(() => _aboutWindow.Close());
-            _historyWindow.Dispatcher.Invoke(() => _historyWindow.Close());
-            _preferencesWindow.Dispatcher.Invoke(() => _preferencesWindow.Close());
+            _aboutWindow?.Dispatcher.Invoke(() => _aboutWindow.Close());
+            _historyWindow?.Dispatcher.Invoke(() => _historyWindow.Close());
+            _preferencesWindow?.Dispatcher.Invoke(() => _preferencesWindow.Close());
             _menuHostWindow.Dispatcher.Invoke(() => _menuHostWindow.Close());
             _app.Shutdown();
         }
@@ -295,9 +308,9 @@ namespace WinKit.Common
             catch { }
 
             _trayIcon?.Dispose();
-            _aboutWindow.Dispatcher.Invoke(() => _aboutWindow.Close());
-            _historyWindow.Dispatcher.Invoke(() => _historyWindow.Close());
-            _preferencesWindow.Dispatcher.Invoke(() => _preferencesWindow.Close());
+            _aboutWindow?.Dispatcher.Invoke(() => _aboutWindow.Close());
+            _historyWindow?.Dispatcher.Invoke(() => _historyWindow.Close());
+            _preferencesWindow?.Dispatcher.Invoke(() => _preferencesWindow.Close());
             _menuHostWindow.Dispatcher.Invoke(() => _menuHostWindow.Close());
         }
     }
