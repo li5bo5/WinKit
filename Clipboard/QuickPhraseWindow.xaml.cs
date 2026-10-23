@@ -108,44 +108,21 @@ namespace WinKit.Clipboard
                 targetY = mousePos.Y + 10;
             }
 
-            // 5. 按目标屏幕自身 DPI 计算物理坐标与边界约束（消除混合 DPI 多屏定位偏移）
-            double scale = NativeMethods.GetScaleForPoint(targetX, targetY);
-            var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(targetX, targetY)).WorkingArea;
-
-            double winW = Width > 0 ? Width : 300;
-            double winH = ActualHeight > 0 ? ActualHeight : 200;
-            int physW = (int)Math.Round(winW * scale);
-            int physH = (int)Math.Round(winH * scale);
-            int pad   = (int)Math.Round(10 * scale);
-
-            int physLeft = targetX;
-            int physTop  = targetY;
-            if (physLeft + physW > area.Right)  physLeft = area.Right - physW - pad;
-            if (physLeft < area.Left)           physLeft = area.Left + pad;
-            if (physTop  + physH > area.Bottom) physTop  = targetY - physH - pad;
-            if (physTop  < area.Top)            physTop  = area.Top + pad;
-
-            Left = physLeft / scale;
-            Top  = physTop  / scale;
-
-            // 6. 默认选中第一项
-            if (_phraseManager.Items.Count > 0)
+            // 5. 按目标屏幕自身 DPI 计算物理坐标与边界约束并置顶弹出
+            NativeMethods.ShowPopupAtPoint(this, selfHwnd, targetX, targetY, offsetLogical: 0, beforeShow: () =>
             {
-                PhrasesList.SelectedIndex = 0;
-            }
+                if (_phraseManager.Items.Count > 0)
+                {
+                    PhrasesList.SelectedIndex = 0;
+                }
+                _lastMouseMovePos = Mouse.GetPosition(this);
+            });
 
-            _lastMouseMovePos = Mouse.GetPosition(this);
-
-            // 7. 显示并正常激活焦点
-            Show();
-            WindowState = WindowState.Normal;
-            NativeMethods.SetWindowPos(selfHwnd, NativeMethods.HWND_TOPMOST, physLeft, physTop, 0, 0,
-                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW);
             Activate();
             Focus();
             PhrasesList.Focus();
 
-            // 8. 启动鼠标外部监听
+            // 6. 启动鼠标外部监听
             _mouseMonitor.Start(new[] { selfHwnd });
         }
 
@@ -153,15 +130,7 @@ namespace WinKit.Clipboard
 
         private void ListBoxItem_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            var pos = e.GetPosition(this);
-            if (pos != _lastMouseMovePos)
-            {
-                _lastMouseMovePos = pos;
-                if (sender is ListBoxItem item && !item.IsSelected)
-                {
-                    item.IsSelected = true;
-                }
-            }
+            NativeMethods.SelectListBoxItemOnMouseMove(this, sender, e, ref _lastMouseMovePos);
         }
 
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -302,24 +271,10 @@ namespace WinKit.Clipboard
                     Hide();
                     await Task.Delay(40);
 
-                    // 6. 焦点精准归还给前台目标窗口
-                    if (_lastTargetHwnd != IntPtr.Zero && NativeMethods.IsWindow(_lastTargetHwnd))
-                    {
-                        NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
-                        for (int wait = 0; wait < 8 && NativeMethods.GetForegroundWindow() != _lastTargetHwnd; wait++)
-                        {
-                            await Task.Delay(25);
-                        }
-                        await Task.Delay(35);
-                    }
+                    // 6. 焦点精准归还给前台目标窗口并模拟 Ctrl+V 粘贴
+                    await NativeMethods.RestoreFocusAndPasteAsync(_lastTargetHwnd);
 
-                    // 7. 模拟 Ctrl+V 粘贴（确保前台不是本进程窗口，防止误贴进自身）
-                    if (!NativeMethods.IsOwnWindow(NativeMethods.GetForegroundWindow()))
-                    {
-                        NativeMethods.SimulateCtrlV();
-                    }
-
-                    // 8. 等待目标应用读取剪贴板完毕后（120ms），从独立内存副本将用户原有剪贴板恢复回去
+                    // 7. 等待目标应用读取剪贴板完毕后（120ms），从独立内存副本将用户原有剪贴板恢复回去
                     await Task.Delay(120);
 
                     if (!string.IsNullOrEmpty(backupText))

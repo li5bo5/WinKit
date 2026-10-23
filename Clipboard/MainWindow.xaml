@@ -314,8 +314,7 @@
                         Width="12" Height="12"
                         Background="Transparent"
                         Cursor="SizeNWSE"
-                        Opacity="0.4"
-                        MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown">
+                        Opacity="0.4">
                     <Canvas Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                         <Line X1="10" Y1="4"  X2="4"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>
                         <Line X1="10" Y1="7"  X2="7"  Y2="10" Stroke="{DynamicResource ThemeTextTertiaryBrush}" StrokeThickness="1.2" StrokeEndLineCap="Round"/>

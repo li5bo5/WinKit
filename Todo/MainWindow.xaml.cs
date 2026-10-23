@@ -46,11 +46,6 @@ namespace WinKit.Todo
         private double _autoScrollVelocity = 0;
         private readonly List<(double Top, double Height)> _itemInitialBounds = new();
 
-        // 窗口调整大小
-        private bool _isResizing;
-        private WinPoint _resizeStart;
-        private double   _resizeStartW, _resizeStartH;
-
         // 置顶 / 穿透（联动状态）
         private bool _isPinned      = false;
         private bool _isPassThrough = false;
@@ -168,12 +163,13 @@ namespace WinKit.Todo
                     }
                     if (_isPinned != settings.TodoIsPinned)
                     {
-                        _isPinned = settings.TodoIsPinned;
-                        this.Topmost = _isPinned;
-                        UpdatePinButton();
+                        SetPinned(settings.TodoIsPinned);
                     }
                 });
             };
+
+            // 统一挂载右下角拖拽缩放与落盘保存
+            NativeMethods.AttachResizeGrip(this, ResizeGripArea, SaveWindowBounds);
 
             // 初始化占位符状态
             UpdateEmptyPlaceholder();
@@ -257,14 +253,6 @@ namespace WinKit.Todo
                 _tray?.EnsureVisible();
                 NativeMethods.BindOwnerToProgman(hwnd);
             }
-
-            // 3. 按光标所在屏幕钳制窗口拖动（支持跨屏且不溢出屏幕）
-            if (msg == NativeMethods.WM_MOVING)
-            {
-                NativeMethods.ClampMovingRectToCursorScreen(lParam);
-                handled = true;
-                return new IntPtr(1);
-            }
             return IntPtr.Zero;
         }
 
@@ -332,7 +320,7 @@ namespace WinKit.Todo
         {
             if (e.ClickCount == 1)
             {
-                DragMove();
+                NativeMethods.DragMoveWithBounds(this);
                 SaveWindowBounds();
             }
         }
@@ -489,9 +477,7 @@ namespace WinKit.Todo
                 // 开启穿透模式时，必须默认置顶，防止穿透点击下层窗口时导致 TodoList 被下层窗口覆盖
                 if (!_isPinned)
                 {
-                    _isPinned = true;
-                    this.Topmost = true;
-                    UpdatePinButton();
+                    SetPinned(true);
                 }
             }
 
@@ -512,38 +498,8 @@ namespace WinKit.Todo
             }
         }
 
-        // ══════════════════════════════════════════════
-        // 右下角自定义 ResizeGrip
-        // ══════════════════════════════════════════════
-        private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            _isResizing   = true;
-            _resizeStart  = e.GetPosition(null);
-            _resizeStartW = Width;
-            _resizeStartH = Height;
-            ((UIElement)sender).CaptureMouse();
-            ((UIElement)sender).MouseMove        += ResizeGrip_MouseMove;
-            ((UIElement)sender).MouseLeftButtonUp += ResizeGrip_MouseLeftButtonUp;
-            e.Handled = true;
-        }
-
-        private void ResizeGrip_MouseMove(object sender, WinMouse e)
-        {
-            if (!_isResizing) return;
-            NativeMethods.ApplyResizeWithScreenClamp(this, _resizeStartW, _resizeStartH, e.GetPosition(null) - _resizeStart);
-        }
-
         public bool IsPreferencesWindowOpen { get; set; } = false;
         public EditDialog? ActiveEditDialog { get; set; } = null;
-
-        private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            _isResizing = false;
-            ((UIElement)sender).ReleaseMouseCapture();
-            ((UIElement)sender).MouseMove        -= ResizeGrip_MouseMove;
-            ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
-            SaveWindowBounds();
-        }
 
         // ══════════════════════════════════════════════
         // 待办创建与编辑统一弹窗呼出
@@ -1163,15 +1119,8 @@ namespace WinKit.Todo
         private void LoadSettings()
         {
             var settings = _settingsManager.Settings;
-            _isPinned = settings.TodoIsPinned;
-            _isPassThrough = settings.TodoIsPassThrough;
-
-            // 应用置顶状态
-            this.Topmost = _isPinned;
-            UpdatePinButton();
-
-            // 应用穿透状态
-            ApplyPassThroughState(_isPassThrough);
+            SetPinned(settings.TodoIsPinned);
+            ApplyPassThroughState(settings.TodoIsPassThrough);
         }
 
         private void SaveSettings()

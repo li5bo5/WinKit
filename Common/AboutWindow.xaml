@@ -8,7 +8,6 @@
         ShowInTaskbar="False"
         Topmost="True"
         WindowStartupLocation="CenterScreen"
-        Deactivated="Window_Deactivated"
         PreviewKeyDown="Window_PreviewKeyDown">
 
     <Border Style="{StaticResource FluentWindowBorder}"
@@ -65,7 +64,7 @@
                            HorizontalAlignment="Center" 
                            FontSize="10" 
                            Foreground="{DynamicResource ThemeTextTertiaryBrush}"/>
-                <TextBlock Text="按 Esc 键关闭" 
+                <TextBlock Text="按 Esc 键或点击外部关闭" 
                            HorizontalAlignment="Center" 
                            FontSize="9" 
                            Foreground="{DynamicResource ThemeTextTertiaryBrush}" 

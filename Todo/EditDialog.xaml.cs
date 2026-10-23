@@ -138,7 +138,7 @@ namespace WinKit.Todo
         // 标题栏拖动（单击才拖，双击交由全局处理保存）
         private void DlgTitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 1) DragMove();
+            if (e.ClickCount == 1) NativeMethods.DragMoveWithBounds(this);
         }
 
         private void InputBox_PreviewKeyDown(object sender, WinKey e)

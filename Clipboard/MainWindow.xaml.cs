@@ -24,11 +24,6 @@ namespace WinKit.Clipboard
         private readonly ClipboardService _clipboardService;
         private readonly SettingsManager  _settingsManager;
 
-        // ── 拖拽调整大小 ───────────────────────────────
-        private bool     _isResizing = false;
-        private WinPoint _resizeStart;
-        private double   _resizeStartW, _resizeStartH;
-
         // ── 前台目标窗口句柄（呼出剪贴板前的活动窗口） ──
         private IntPtr _lastTargetHwnd = IntPtr.Zero;
 
@@ -81,6 +76,9 @@ namespace WinKit.Clipboard
 
             // 配置鼠标点击监听 — 点击剪贴板窗口以外的区域时，若未固定则隐藏
             _mouseMonitor.ClickedOutside += OnClickedOutsideWindow;
+
+            // 统一挂载右下角拖拽缩放
+            NativeMethods.AttachResizeGrip(this, ResizeGripArea);
         }
 
         // ══════════════════════════════════════════════
@@ -92,19 +90,6 @@ namespace WinKit.Clipboard
             var hwnd    = new WindowInteropHelper(this).Handle;
             int exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
             NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_TOOLWINDOW);
-            HwndSource.FromHwnd(hwnd)?.AddHook(WndProc);
-        }
-
-        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            // 按光标所在屏幕钳制窗口拖动（支持跨屏且不溢出屏幕）
-            if (msg == NativeMethods.WM_MOVING)
-            {
-                NativeMethods.ClampMovingRectToCursorScreen(lParam);
-                handled = true;
-                return new IntPtr(1);
-            }
-            return IntPtr.Zero;
         }
 
         // ══════════════════════════════════════════════
@@ -261,59 +246,32 @@ namespace WinKit.Clipboard
             if (fgWnd != IntPtr.Zero && fgWnd != selfHwnd && !NativeMethods.IsOwnWindow(fgWnd) && NativeMethods.IsWindow(fgWnd))
                 _lastTargetHwnd = fgWnd;
 
-            // ② 按目标屏幕自身 DPI 计算弹出物理坐标（解决多显示器不同缩放比例下的跨屏定位偏差）
+            // ② 按目标屏幕自身 DPI 计算弹出物理坐标并置顶显示
             NativeMethods.GetCursorPos(out var mousePos);
-            var screen   = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(mousePos.X, mousePos.Y));
-            var area     = screen.WorkingArea;
-            double scale = NativeMethods.GetScaleForPoint(mousePos.X, mousePos.Y);
-
-            int winW   = (int)Math.Round(Width  * scale);
-            int winH   = (int)Math.Round(Height * scale);
-            int offset = (int)Math.Round(10     * scale);
-
-            int physLeft = mousePos.X + offset;
-            int physTop  = mousePos.Y + offset;
-
-            if (physLeft + winW > area.Right)  physLeft = mousePos.X - winW - offset;
-            if (physLeft        < area.Left)   physLeft = area.Left;
-            if (physTop  + winH > area.Bottom) physTop  = mousePos.Y - winH - offset;
-            if (physTop         < area.Top)    physTop  = area.Top;
-
-            Left = physLeft / scale;
-            Top  = physTop  / scale;
-
-            // ③ 清空上次搜索词并重置状态
-            _isPinned = false;
-            UpdatePinButton();
-            SetTitleButtonsOpacity(0);
-            if (!string.IsNullOrEmpty(SearchBox.Text))
+            NativeMethods.ShowPopupAtPoint(this, selfHwnd, mousePos.X, mousePos.Y, offsetLogical: 10, beforeShow: () =>
             {
-                SearchBox.Text = string.Empty;
-            }
-            if (ClipboardList.Items.Count > 0)
-            {
-                ClipboardList.SelectedIndex = 0;
-            }
-
-            // ④ 未开启记忆滚动时，复位到第一条
-            if (!_settingsManager.Settings.PasteRememberScrollPosition && ClipboardList.Items.Count > 0)
-                ClipboardList.ScrollIntoView(ClipboardList.Items[0]);
-
-            UpdateLayout();
-            _lastMouseMovePos = Mouse.GetPosition(this);
-
-            Show();
-            WindowState = WindowState.Normal;
-
-            // 使用物理像素直接定位并置顶，避免跨 DPI 屏幕时的逻辑坐标换算漂移
-            NativeMethods.SetWindowPos(selfHwnd, NativeMethods.HWND_TOPMOST, physLeft, physTop, 0, 0,
-                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW);
+                _isPinned = false;
+                UpdatePinButton();
+                SetTitleButtonsOpacity(0);
+                if (!string.IsNullOrEmpty(SearchBox.Text))
+                {
+                    SearchBox.Text = string.Empty;
+                }
+                if (ClipboardList.Items.Count > 0)
+                {
+                    ClipboardList.SelectedIndex = 0;
+                    if (!_settingsManager.Settings.PasteRememberScrollPosition)
+                        ClipboardList.ScrollIntoView(ClipboardList.Items[0]);
+                }
+                UpdateLayout();
+                _lastMouseMovePos = Mouse.GetPosition(this);
+            });
 
             Activate();
             NativeMethods.ForceSetForegroundWindow(selfHwnd);
             SearchBox.Focus();
 
-            // ⑤ 启动外部鼠标点击监听
+            // ③ 启动外部鼠标点击监听
             RefreshMouseMonitor();
         }
 
@@ -352,7 +310,7 @@ namespace WinKit.Clipboard
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 1) DragMove();
+            if (e.ClickCount == 1) NativeMethods.DragMoveWithBounds(this);
         }
 
         public new void Hide()
@@ -386,15 +344,7 @@ namespace WinKit.Clipboard
 
         private void ListBoxItem_MouseMove(object sender, MouseEventArgs e)
         {
-            var pos = e.GetPosition(this);
-            if (pos != _lastMouseMovePos)
-            {
-                _lastMouseMovePos = pos;
-                if (sender is ListBoxItem item && !item.IsSelected)
-                {
-                    item.IsSelected = true;
-                }
-            }
+            NativeMethods.SelectListBoxItemOnMouseMove(this, sender, e, ref _lastMouseMovePos);
         }
 
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -471,22 +421,8 @@ namespace WinKit.Clipboard
                     await Task.Delay(50);
                 }
 
-                // 3. 精准归还前台焦点至目标输入窗口
-                if (_lastTargetHwnd != IntPtr.Zero && NativeMethods.IsWindow(_lastTargetHwnd))
-                {
-                    NativeMethods.ForceSetForegroundWindow(_lastTargetHwnd);
-                    for (int wait = 0; wait < 6 && NativeMethods.GetForegroundWindow() != _lastTargetHwnd; wait++)
-                    {
-                        await Task.Delay(30);
-                    }
-                    await Task.Delay(30);
-                }
-
-                // 4. 模拟 Ctrl+V 粘贴（确保前台不是本进程窗口，防止误贴进自身）
-                if (!NativeMethods.IsOwnWindow(NativeMethods.GetForegroundWindow()))
-                {
-                    NativeMethods.SimulateCtrlV();
-                }
+                // 3. 精准归还前台焦点并模拟 Ctrl+V 粘贴
+                await NativeMethods.RestoreFocusAndPasteAsync(_lastTargetHwnd);
             }
             catch (Exception ex)
             {
@@ -613,35 +549,6 @@ namespace WinKit.Clipboard
                 obj = System.Windows.Media.VisualTreeHelper.GetParent(obj);
             }
             return false;
-        }
-
-        // ══════════════════════════════════════════════
-        // 右下角 ResizeGrip 调整窗口大小（含工作区边界钳制）
-        // ══════════════════════════════════════════════
-        private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            _isResizing    = true;
-            _resizeStart   = e.GetPosition(null);
-            _resizeStartW  = Width;
-            _resizeStartH  = Height;
-            ((UIElement)sender).CaptureMouse();
-            ((UIElement)sender).MouseMove        += ResizeGrip_MouseMove;
-            ((UIElement)sender).MouseLeftButtonUp += ResizeGrip_MouseLeftButtonUp;
-            e.Handled = true;
-        }
-
-        private void ResizeGrip_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (!_isResizing) return;
-            NativeMethods.ApplyResizeWithScreenClamp(this, _resizeStartW, _resizeStartH, e.GetPosition(null) - _resizeStart);
-        }
-
-        private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            _isResizing = false;
-            ((UIElement)sender).ReleaseMouseCapture();
-            ((UIElement)sender).MouseMove        -= ResizeGrip_MouseMove;
-            ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

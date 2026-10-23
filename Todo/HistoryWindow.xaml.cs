@@ -16,12 +16,6 @@ namespace WinKit.Todo
         private readonly ObservableCollection<RecycleBinItem> _items = new();
         private readonly MainWindow _todoWindow;
 
-        // ResizeGrip 缩放拖动状态
-        private bool _isResizing = false;
-        private System.Windows.Point _resizeStart;
-        private double _resizeStartW;
-        private double _resizeStartH;
-
         public HistoryWindow(MainWindow todoWindow, SettingsManager settingsManager)
         {
             InitializeComponent();
@@ -37,6 +31,8 @@ namespace WinKit.Todo
 
             HistoryList.ItemsSource = _items;
             _items.CollectionChanged += (s, e) => UpdateUIStates();
+
+            NativeMethods.AttachResizeGrip(this, ResizeGripArea);
 
             Loaded += (s, e) => ReloadRecycleBin();
         }
@@ -57,9 +53,12 @@ namespace WinKit.Todo
             EmptyPlaceholder.Visibility = _items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        private void TitleBar_MouseEnter(object sender, WinMouse e) => CloseBtn.Opacity = 1;
+        private void TitleBar_MouseLeave(object sender, WinMouse e) => CloseBtn.Opacity = 0;
+
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 1) DragMove();
+            if (e.ClickCount == 1) NativeMethods.DragMoveWithBounds(this);
         }
 
         private void CloseBtn_Click(object sender, RoutedEventArgs e)
@@ -111,38 +110,6 @@ namespace WinKit.Todo
             {
                 _items.Remove(item);
                 _recycleBinService.SaveItems(_items);
-            }
-        }
-
-        // ══════════════════════════════════════════════
-        // 右下角统一 ResizeGrip 缩放拖动
-        // ══════════════════════════════════════════════
-        private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            _isResizing = true;
-            _resizeStart = e.GetPosition(null);
-            _resizeStartW = Width;
-            _resizeStartH = Height;
-            ((UIElement)sender).CaptureMouse();
-            ((UIElement)sender).MouseMove += ResizeGrip_MouseMove;
-            ((UIElement)sender).MouseLeftButtonUp += ResizeGrip_MouseLeftButtonUp;
-            e.Handled = true;
-        }
-
-        private void ResizeGrip_MouseMove(object sender, WinMouse e)
-        {
-            if (!_isResizing) return;
-            NativeMethods.ApplyResizeWithScreenClamp(this, _resizeStartW, _resizeStartH, e.GetPosition(null) - _resizeStart);
-        }
-
-        private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_isResizing)
-            {
-                _isResizing = false;
-                ((UIElement)sender).ReleaseMouseCapture();
-                ((UIElement)sender).MouseMove -= ResizeGrip_MouseMove;
-                ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
             }
         }
 
