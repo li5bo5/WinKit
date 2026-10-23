@@ -14,16 +14,12 @@ namespace WinKit.Todo.Services
         private readonly JsonLinesStorage<RecycleBinItem> _storage;
         private readonly SettingsManager _settingsManager;
 
+        public event EventHandler? ItemsChanged;
+
         public RecycleBinService(SettingsManager settingsManager)
         {
             _settingsManager = settingsManager;
             _storage = new JsonLinesStorage<RecycleBinItem>(AppPaths.RecycleBin);
-        }
-
-        public RecycleBinService(SettingsManager settingsManager, string filePath)
-        {
-            _settingsManager = settingsManager;
-            _storage = new JsonLinesStorage<RecycleBinItem>(filePath);
         }
 
         /// <summary>
@@ -68,6 +64,7 @@ namespace WinKit.Todo.Services
 
             currentItems.Insert(0, recycleItem);
             _storage.Save(currentItems);
+            ItemsChanged?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>

@@ -1,10 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
-using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
 using WinKit.Common;
 using WinKit.Todo.Models;
 using WinKit.Todo.Services;
@@ -29,7 +26,14 @@ namespace WinKit.Todo
         {
             InitializeComponent();
             _todoWindow = todoWindow;
-            _recycleBinService = new RecycleBinService(settingsManager);
+            _recycleBinService = todoWindow.RecycleBinService;
+            _recycleBinService.ItemsChanged += (s, e) =>
+            {
+                if (IsVisible)
+                {
+                    ReloadRecycleBin();
+                }
+            };
 
             HistoryList.ItemsSource = _items;
             _items.CollectionChanged += (s, e) => UpdateUIStates();
@@ -65,16 +69,6 @@ namespace WinKit.Todo
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
-            {
-                Hide();
-                e.Handled = true;
-            }
-        }
-
-        protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
-        {
-            base.OnPreviewKeyDown(e);
             if (e.Key == Key.Escape)
             {
                 Hide();
@@ -138,24 +132,7 @@ namespace WinKit.Todo
         private void ResizeGrip_MouseMove(object sender, WinMouse e)
         {
             if (!_isResizing) return;
-            var pos = e.GetPosition(null);
-            var delta = pos - _resizeStart;
-
-            double newW = Math.Max(MinWidth, _resizeStartW + delta.X);
-            double newH = Math.Max(MinHeight, _resizeStartH + delta.Y);
-
-            var area = GetCurrentScreenWorkArea();
-            if (Left + newW > area.Right)
-            {
-                newW = area.Right - Left;
-            }
-            if (Top + newH > area.Bottom)
-            {
-                newH = area.Bottom - Top;
-            }
-
-            Width = newW;
-            Height = newH;
+            NativeMethods.ApplyResizeWithScreenClamp(this, _resizeStartW, _resizeStartH, e.GetPosition(null) - _resizeStart);
         }
 
         private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -167,18 +144,6 @@ namespace WinKit.Todo
                 ((UIElement)sender).MouseMove -= ResizeGrip_MouseMove;
                 ((UIElement)sender).MouseLeftButtonUp -= ResizeGrip_MouseLeftButtonUp;
             }
-        }
-
-        private Rect GetCurrentScreenWorkArea()
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
-            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
-            return new Rect(
-                screen.WorkingArea.Left / dpi.DpiScaleX,
-                screen.WorkingArea.Top / dpi.DpiScaleY,
-                screen.WorkingArea.Width / dpi.DpiScaleX,
-                screen.WorkingArea.Height / dpi.DpiScaleY);
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

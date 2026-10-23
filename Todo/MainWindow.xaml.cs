@@ -1,9 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -14,28 +14,21 @@ using System.Windows.Threading;
 using WinKit.Common;
 using WinKit.Todo.Models;
 using WinKit.Todo.Services;
-using WinPoint       = System.Windows.Point;
-using WinKey         = System.Windows.Input.KeyEventArgs;
-using WinMouse       = System.Windows.Input.MouseEventArgs;
-using WinDrag        = System.Windows.DragEventArgs;
-using WinButton      = System.Windows.Controls.Button;
-using WinPanel       = System.Windows.Controls.Panel;
-using WinDropEffects = System.Windows.DragDropEffects;
+using WinPoint  = System.Windows.Point;
+using WinMouse  = System.Windows.Input.MouseEventArgs;
+using WinButton = System.Windows.Controls.Button;
+using WinPanel  = System.Windows.Controls.Panel;
 
 namespace WinKit.Todo
 {
     public partial class MainWindow : Window
     {
-        // ══════════════════════════════════════════════
-        // Win32 P/Invoke — 鼠标穿透（仅内容区）
-        // ══════════════════════════════════════════════
-        private const int WM_NCHITTEST  = 0x0084;
-        private const int HTTRANSPARENT = -1;
-
         private readonly ObservableCollection<TodoItem> _items = new();
         private readonly TodoService _todoService;
         private readonly RecycleBinService _recycleBinService;
         private readonly SettingsManager _settingsManager;
+
+        public RecycleBinService RecycleBinService => _recycleBinService;
 
         // 拖拽平滑排序动画状态
         private WinPoint _dragStartPos;
@@ -58,31 +51,15 @@ namespace WinKit.Todo
         private WinPoint _resizeStart;
         private double   _resizeStartW, _resizeStartH;
 
-        // 置顶 / 穿透（独立状态）
+        // 置顶 / 穿透（联动状态）
         private bool _isPinned      = false;
         private bool _isPassThrough = false;
 
-        // 托盘引用（用于同步状态）
+        // 托盘引用（用于任务栏重建时恢复托盘图标）
         private TrayHelper? _tray;
-        public bool IsPinned      => _isPinned;
-        public bool IsPassThrough => _isPassThrough;
-        public bool IsPassThroughEnabled
-        {
-            get => _isPassThrough;
-            set
-            {
-                if (_isPassThrough != value)
-                {
-                    TogglePassThroughState();
-                }
-            }
-        }
         public void SetTray(TrayHelper tray) => _tray = tray;
 
-        private const int WM_MOVING = 0x0216;
         private const int WM_SHOWWINDOW = 0x0018;
-        private const int SW_PARENTCLOSING = 1;
-        private const int SW_OTHERZOOM = 2;
         private const int WM_WINDOWPOSCHANGING = 0x0046;
         private const int SWP_HIDEWINDOW = 0x0080;
         private const int WM_SYSCOMMAND = 0x0112;
@@ -99,26 +76,6 @@ namespace WinKit.Todo
             public int cy;
             public uint flags;
         }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int X;
-            public int Y;
-        }
-
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_TRANSPARENT = 0x00000020;
-        private const int WS_EX_TOOLWINDOW = 0x00000080;
 
         private bool _isExplicitlyHiding = false;
 
@@ -150,21 +107,6 @@ namespace WinKit.Todo
                 StopPassThroughMonitor();
             }
         }
-
-        [DllImport("user32.dll")]
-        private static extern int GetWindowLong(IntPtr hwnd, int index);
-
-        [DllImport("user32.dll")]
-        private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
-
-        [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
 
         // ══════════════════════════════════════════════
         // 构造函数
@@ -238,9 +180,9 @@ namespace WinKit.Todo
 
             // 初始状态下标题栏按钮保持隐藏（仅悬停时浮现）
             Loaded += (s, e) =>
-            { 
-                UpdateEmptyPlaceholder(); 
-                SetTitleButtonsOpacity(0); 
+            {
+                UpdateEmptyPlaceholder();
+                SetTitleButtonsOpacity(0);
             };
         }
 
@@ -261,13 +203,13 @@ namespace WinKit.Todo
             base.OnSourceInitialized(e);
             var hwnd = new WindowInteropHelper(this).Handle;
 
-            int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            extendedStyle |= WS_EX_TOOLWINDOW;
+            int extendedStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
+            extendedStyle |= NativeMethods.WS_EX_TOOLWINDOW;
             if (_isPassThrough)
             {
-                extendedStyle |= WS_EX_TRANSPARENT;
+                extendedStyle |= NativeMethods.WS_EX_TRANSPARENT;
             }
-            SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle);
+            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, extendedStyle);
             // 所有者绑定桌面 Progman：非置顶时 Win+D 随桌面一同显示
             NativeMethods.BindOwnerToProgman(hwnd);
         }
@@ -309,18 +251,7 @@ namespace WinKit.Todo
                 catch { }
             }
 
-            // 2. 接收来自新进程的激活广播消息
-            if (msg == NativeMethods.WM_SHOW_EXISTING_INSTANCE)
-            {
-                if (!IsVisible) Show();
-                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-                Activate();
-                NativeMethods.ForceSetForegroundWindow(hwnd);
-                handled = true;
-                return IntPtr.Zero;
-            }
-
-            // 2.1 任务栏重建自愈（Explorer 重启后恢复托盘图标）
+            // 2. 任务栏重建自愈（Explorer 重启后恢复托盘图标）
             if (msg == NativeMethods.WM_TASKBARCREATED)
             {
                 _tray?.EnsureVisible();
@@ -328,7 +259,7 @@ namespace WinKit.Todo
             }
 
             // 3. 按光标所在屏幕钳制窗口拖动（支持跨屏且不溢出屏幕）
-            if (msg == WM_MOVING)
+            if (msg == NativeMethods.WM_MOVING)
             {
                 NativeMethods.ClampMovingRectToCursorScreen(lParam);
                 handled = true;
@@ -339,6 +270,7 @@ namespace WinKit.Todo
 
         private void EnsureWindowAboveDesktop()
         {
+            const uint flags = NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW;
             Action updatePos = () =>
             {
                 var h = new WindowInteropHelper(this).Handle;
@@ -346,13 +278,13 @@ namespace WinKit.Todo
                 {
                     if (_isPinned)
                     {
-                        SetWindowPos(h, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
+                        NativeMethods.SetWindowPos(h, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, flags);
                     }
                     else
                     {
                         // 非置顶状态：先刷到 TOPMOST 再落回 NOTOPMOST，确保窗口跃居于刚提升的桌面之上但保持非置顶
-                        SetWindowPos(h, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
-                        SetWindowPos(h, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
+                        NativeMethods.SetWindowPos(h, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, flags);
+                        NativeMethods.SetWindowPos(h, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, flags);
                     }
                 }
             };
@@ -413,12 +345,6 @@ namespace WinKit.Todo
         private void PinBtn_Click(object sender, RoutedEventArgs e)
         {
             TogglePinState();
-            _tray?.SyncPinMenuItem();
-        }
-
-        internal void TogglePinFromTray()
-        {
-            TogglePinState();
         }
 
         public void SetPinned(bool pinned)
@@ -431,9 +357,7 @@ namespace WinKit.Todo
             if (!_isPinned && _isPassThrough)
             {
                 ApplyPassThroughState(false);
-                _tray?.SyncPassThroughMenuItem();
             }
-            _tray?.SyncPinMenuItem();
         }
 
         private void TogglePinState()
@@ -453,12 +377,6 @@ namespace WinKit.Todo
         // 鼠标穿透控制逻辑
         // ══════════════════════════════════════════════
         private void PassThroughBtn_Click(object sender, RoutedEventArgs e)
-        {
-            TogglePassThroughState();
-            _tray?.SyncPassThroughMenuItem();
-        }
-
-        internal void TogglePassThroughFromTray()
         {
             TogglePassThroughState();
         }
@@ -506,7 +424,7 @@ namespace WinKit.Todo
                 return;
             }
 
-            if (!GetCursorPos(out POINT screenPoint)) return;
+            if (!NativeMethods.GetCursorPos(out var screenPoint)) return;
 
             WinPoint relPos;
             try
@@ -550,14 +468,14 @@ namespace WinKit.Todo
         {
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero) return;
-            int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            int extendedStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
             if (transparent)
             {
-                SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT);
+                NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, extendedStyle | NativeMethods.WS_EX_TRANSPARENT);
             }
             else
             {
-                SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
+                NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, extendedStyle & ~NativeMethods.WS_EX_TRANSPARENT);
             }
         }
 
@@ -574,7 +492,6 @@ namespace WinKit.Todo
                     _isPinned = true;
                     this.Topmost = true;
                     UpdatePinButton();
-                    _tray?.SyncPinMenuItem();
                 }
             }
 
@@ -613,46 +530,11 @@ namespace WinKit.Todo
         private void ResizeGrip_MouseMove(object sender, WinMouse e)
         {
             if (!_isResizing) return;
-            var pos   = e.GetPosition(null);
-            var delta = pos - _resizeStart;
-            
-            double newW = Math.Max(MinWidth, _resizeStartW + delta.X);
-            double newH = Math.Max(MinHeight, _resizeStartH + delta.Y);
-
-            var area = GetCurrentScreenWorkArea();
-            if (Left + newW > area.Right)
-            {
-                newW = area.Right - Left;
-            }
-            if (Top + newH > area.Bottom)
-            {
-                newH = area.Bottom - Top;
-            }
-
-            Width  = newW;
-            Height = newH;
+            NativeMethods.ApplyResizeWithScreenClamp(this, _resizeStartW, _resizeStartH, e.GetPosition(null) - _resizeStart);
         }
 
         public bool IsPreferencesWindowOpen { get; set; } = false;
         public EditDialog? ActiveEditDialog { get; set; } = null;
-
-        private Rect GetCurrentScreenWorkArea()
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
-            var area = screen.WorkingArea;
-
-            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
-            double dpiScaleX = dpi.DpiScaleX;
-            double dpiScaleY = dpi.DpiScaleY;
-
-            return new Rect(
-                area.Left / dpiScaleX,
-                area.Top / dpiScaleY,
-                area.Width / dpiScaleX,
-                area.Height / dpiScaleY
-            );
-        }
 
         private void ResizeGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
@@ -707,7 +589,7 @@ namespace WinKit.Todo
 
         public void HideInlineInput()
         {
-            // 内联输入已全面统一为独立弹窗，保留此方法兼容外部托盘调用
+            // 关闭当前正在打开的新建/编辑弹窗
             if (ActiveEditDialog != null)
             {
                 ActiveEditDialog.Close();
@@ -770,16 +652,17 @@ namespace WinKit.Todo
 
                 if (hwnd != IntPtr.Zero)
                 {
+                    const uint flags = NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOMOVE | NativeMethods.SWP_SHOWWINDOW;
                     // 刷新 Z-Order，确保无论当前置顶与否均跃居于屏幕最前方
                     if (_isPinned)
                     {
-                        SetWindowPos(hwnd, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040); // HWND_TOPMOST
+                        NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, flags);
                     }
                     else
                     {
                         // 经典双阶段 Z 序提升：先 TOPMOST 再 NOTOPMOST，突破 Windows Z-Order 下沉粘滞
-                        SetWindowPos(hwnd, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
-                        SetWindowPos(hwnd, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
+                        NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, flags);
+                        NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, flags);
                     }
 
                     // 穿透 Windows 前台锁限制，强制切到前台活动状态
@@ -1099,7 +982,6 @@ namespace WinKit.Todo
             double currentScrollOffset = sv?.VerticalOffset ?? 0;
 
             // 1. 计算视觉目标 Top 并进行严格边界钳制 (Clamp)
-            // 目标：让被拖动物项完全在 [0, TodoList.ActualHeight - itemHeight] 之间，绝不飞出可视区域
             double desiredVisualTop = currentPos.Y - _dragGrabOffsetY;
             double maxVisualTop = Math.Max(0, TodoList.ActualHeight - _dragContainer.ActualHeight);
             double clampedVisualTop = Math.Clamp(desiredVisualTop, 0, maxVisualTop);
@@ -1119,15 +1001,10 @@ namespace WinKit.Todo
             }
 
             // 3. 计算目标插入插槽（Target Drop Index）
-            // 关键策略：
-            // A. 顶部贴边吸附：当拖动到最顶部区域，直接锁定第 0 项！
-            // B. 底部贴边吸附：当拖动到最底部区域，直接锁定末项！
-            // C. 中间区域：利用缓存坐标线性计算基准中心，只要拖拽项中心跨越目标项中线（50%），立刻响应避让，零延迟不卡顿！
-
             int newTargetIndex = _dragStartIndex;
 
             bool isAtTopEdge = clampedVisualTop <= 6 || (currentPos.Y <= 28 && (sv == null || sv.VerticalOffset <= 2));
-            bool isAtBottomEdge = (clampedVisualTop >= maxVisualTop - 6 && maxVisualTop > 0) || 
+            bool isAtBottomEdge = (clampedVisualTop >= maxVisualTop - 6 && maxVisualTop > 0) ||
                                   (currentPos.Y >= TodoList.ActualHeight - 28 && (sv == null || sv.VerticalOffset >= (sv.ScrollableHeight - 2)));
 
             if (isAtTopEdge)
@@ -1146,12 +1023,10 @@ namespace WinKit.Todo
                 {
                     if (i == _dragStartIndex || i >= _itemInitialBounds.Count) continue;
 
-                    // 高性能基准中心计算：消除高频 TranslatePoint 矩阵变换与虚假动画干扰
                     double otherBaseCenterY = _itemInitialBounds[i].Top - scrollDelta + _itemInitialBounds[i].Height / 2;
 
                     if (i < _dragStartIndex)
                     {
-                        // 向上跨越：只要拖拽中心越过对方中线，立即让位
                         if (dragCenterY < otherBaseCenterY)
                         {
                             newTargetIndex = Math.Min(newTargetIndex, i);
@@ -1159,7 +1034,6 @@ namespace WinKit.Todo
                     }
                     else if (i > _dragStartIndex)
                     {
-                        // 向下跨越：只要拖拽中心越过对方中线，立即让位
                         if (dragCenterY > otherBaseCenterY)
                         {
                             newTargetIndex = Math.Max(newTargetIndex, i);
@@ -1183,7 +1057,6 @@ namespace WinKit.Todo
                     double targetOffsetY = 0;
                     if (_targetDropIndex > _dragStartIndex)
                     {
-                        // 向下拖动：跨过的项向上挪出空位
                         if (i > _dragStartIndex && i <= _targetDropIndex)
                         {
                             targetOffsetY = -itemHeight;
@@ -1191,7 +1064,6 @@ namespace WinKit.Todo
                     }
                     else if (_targetDropIndex < _dragStartIndex)
                     {
-                        // 向上拖动：跨过的项向下挪出空位
                         if (i >= _targetDropIndex && i < _dragStartIndex)
                         {
                             targetOffsetY = itemHeight;
@@ -1311,41 +1183,6 @@ namespace WinKit.Todo
         }
 
         // ══════════════════════════════════════════════
-        // 置顶显示快捷键：
-        // 按下快捷键 -> 检查是否处于置顶状态
-        // - 置顶状态 -> 取消置顶
-        // - 取消置顶状态 -> 置顶 + 取消穿透
-        // ══════════════════════════════════════════════
-        public void ToggleTopmostAndPassThrough()
-        {
-            if (!IsVisible)
-            {
-                Show();
-            }
-
-            if (_isPinned)
-            {
-                // 当前处于置顶状态 -> 取消置顶（自动联动强制退出穿透）
-                SetPinned(false);
-            }
-            else
-            {
-                // 当前处于非置顶状态 -> 置顶 + 取消穿透
-                SetPinned(true);
-                if (_isPassThrough)
-                {
-                    ApplyPassThroughState(false);
-                }
-            }
-
-            SetTitleButtonsOpacity(0);
-            Activate();
-            _tray?.SyncPinMenuItem();
-            _tray?.SyncPassThroughMenuItem();
-            SaveSettings();
-        }
-
-        // ══════════════════════════════════════════════
         // 窗口大小与位置记忆 / 恢复 / 越界保护
         // ══════════════════════════════════════════════
         private void ApplyInitialOrSavedBounds()
@@ -1395,28 +1232,23 @@ namespace WinKit.Todo
                     return false;
                 }
 
-                // 2. 真实活动屏幕探测：先将 WPF DIP 换算为物理像素（针对多显示器不同 DPI 缩放及异形布局）
-                var dpi = VisualTreeHelper.GetDpi(this);
-                double scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
-                double scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+                // 2. 真实活动屏幕探测：按各显示器自身 DPI 将物理屏幕边界换算为 WPF 逻辑坐标进行比对（兼容混合 DPI 多显示器）
+                var probeDip = new WinPoint(left + 30, top + 20);
+                var centerDip = new WinPoint(left + width / 2, top + height / 2);
 
-                int physicalLeft = (int)(left * scaleX);
-                int physicalTop = (int)(top * scaleY);
-                int physicalWidth = (int)(width * scaleX);
-                int physicalHeight = (int)(height * scaleY);
-
-                var probePoint = new System.Drawing.Point(physicalLeft + (int)(30 * scaleX), physicalTop + (int)(20 * scaleY));
-                var screen = System.Windows.Forms.Screen.FromPoint(probePoint);
-                if (screen != null && screen.Bounds.Contains(probePoint))
+                foreach (var scr in System.Windows.Forms.Screen.AllScreens)
                 {
-                    return true;
-                }
+                    double scale = NativeMethods.GetScaleForPoint(scr.Bounds.Left + 1, scr.Bounds.Top + 1);
+                    var logicalBounds = new Rect(
+                        scr.Bounds.Left / scale,
+                        scr.Bounds.Top / scale,
+                        scr.Bounds.Width / scale,
+                        scr.Bounds.Height / scale);
 
-                var centerPoint = new System.Drawing.Point(physicalLeft + physicalWidth / 2, physicalTop + physicalHeight / 2);
-                var centerScreen = System.Windows.Forms.Screen.FromPoint(centerPoint);
-                if (centerScreen != null && centerScreen.Bounds.Contains(centerPoint))
-                {
-                    return true;
+                    if (logicalBounds.Contains(probeDip) || logicalBounds.Contains(centerDip))
+                    {
+                        return true;
+                    }
                 }
             }
             catch

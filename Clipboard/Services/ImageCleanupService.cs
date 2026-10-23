@@ -72,7 +72,7 @@ namespace WinKit.Clipboard.Services
                     long maxStorageBytes = (settings.ClipboardImageMaxStorageMB > 0 ? settings.ClipboardImageMaxStorageMB : 100) * 1024L * 1024L;
 
                     var allItems = _getItemsFunc();
-                    var imageItems = allItems.Where(i => i.IsImage).ToList();
+                    var imageItems = allItems.Where(i => i.IsImage && !i.IsPinned).ToList();
                     var itemsToRemove = new List<ClipboardItem>();
 
                     // ── 阶段 1：保留天数清理 ──────────────────────────────────

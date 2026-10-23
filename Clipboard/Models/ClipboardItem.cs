@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.IO;
 
 namespace WinKit.Clipboard.Models
 {
@@ -53,12 +52,6 @@ namespace WinKit.Clipboard.Models
         /// 创建时间戳
         /// </summary>
         public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
-
-        public DateTime Timestamp
-        {
-            get => CreatedAt.LocalDateTime;
-            set => CreatedAt = new DateTimeOffset(value);
-        }
 
         private bool _isPinned = false;
         /// <summary>
@@ -119,18 +112,6 @@ namespace WinKit.Clipboard.Models
                     _displayTextCached = text.Replace("\r", " ").Replace("\n", " ");
                 }
                 return _displayTextCached;
-            }
-        }
-
-        /// <summary>
-        /// 获取估计内存/占用大小
-        /// </summary>
-        public long EstimatedSize
-        {
-            get
-            {
-                if (IsImage) return ImageSize;
-                return Content?.Length * 2 ?? 0;
             }
         }
 

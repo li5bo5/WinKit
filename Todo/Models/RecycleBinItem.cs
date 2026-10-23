@@ -21,8 +21,5 @@ namespace WinKit.Todo.Models
 
         /// <summary>格式化展示的删除时间</summary>
         public string FormattedTime => DeletedAt.ToString("yyyy-MM-dd HH:mm:ss");
-
-        /// <summary>别名兼容：格式化删除时间</summary>
-        public string FormattedDeletedAt => FormattedTime;
     }
 }

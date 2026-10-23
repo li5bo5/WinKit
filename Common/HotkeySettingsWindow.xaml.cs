@@ -340,6 +340,8 @@ namespace WinKit.Common
             var settings = _settingsManager.Settings;
             settings.HotkeyTodoTopToggle           = "Ctrl+D";
             settings.HotkeyClipboardToggle         = "Win+V";
+            settings.TodoIsPinned                  = false;
+            settings.TodoIsPassThrough             = false;
             settings.TodoExpandedDisplay           = false;
             settings.TrayDoubleClickTodoEnabled    = true;
             settings.RecycleBinRetentionDays       = 60;

@@ -85,12 +85,14 @@ namespace WinKit.Clipboard.Services
         }
 
         private volatile bool _isInternalPasting;
+        private int _internalPasteVersion;
 
         /// <summary>
         /// 开启内部主动回填锁，在此期间绝对不将剪贴板的变化当作用户外部新复制
         /// </summary>
         public void BeginInternalPaste()
         {
+            Interlocked.Increment(ref _internalPasteVersion);
             _isInternalPasting = true;
         }
 
@@ -99,7 +101,14 @@ namespace WinKit.Clipboard.Services
         /// </summary>
         public void EndInternalPaste()
         {
-            Task.Delay(350).ContinueWith(_ => _isInternalPasting = false);
+            int version = Interlocked.Increment(ref _internalPasteVersion);
+            Task.Delay(350).ContinueWith(_ =>
+            {
+                if (Volatile.Read(ref _internalPasteVersion) == version)
+                {
+                    _isInternalPasting = false;
+                }
+            });
         }
 
         private void OnTimerTick(object? sender, EventArgs e)

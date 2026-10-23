@@ -57,7 +57,7 @@ namespace WinKit.Common
 
         private void LinkText_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            LinkText.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 0x66, 0xCC));
+            LinkText.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2A, 0x75, 0xD3));
         }
 
         private void LinkText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

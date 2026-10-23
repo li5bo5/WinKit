@@ -2,11 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Linq;
 using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
 using WinKit.Clipboard.Models;
 using WinKit.Common;
 
@@ -17,12 +13,6 @@ namespace WinKit.Clipboard.Services
     /// </summary>
     public class QuickPhraseManager
     {
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-            WriteIndented = false
-        };
-
         private readonly JsonLinesStorage<QuickPhraseItem> _storage;
         private readonly ObservableCollection<QuickPhraseItem> _items = new();
         private List<QuickPhraseItem> _lastValidCache = new();
